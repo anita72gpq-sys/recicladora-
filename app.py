@@ -12,7 +12,6 @@ except ImportError:
   PDF_DISPONIBLE = False
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 # ---------------------------------------------------------
 # CONFIGURACIÓN DE PÁGINA Y TEMA VISUAL (VERDE ECOLÓGICO)
@@ -202,12 +201,9 @@ def obtener_ruta_carpeta_tickets():
 def mostrar_visor_con_impresion(bytes_pdf, titulo_btn="📥 DESCARGAR / IMPRIMIR PDF"):
     if bytes_pdf:
         base64_pdf = base64.b64encode(bytes_pdf).decode('utf-8')
-        
-        # Visor integrado en pantalla junto con la orden de impresión automática de JavaScript
         pdf_display = f"""
             <iframe id="pdf_frame" src="data:application/pdf;base64,{base64_pdf}" width="100%" height="500px" type="application/pdf"></iframe>
             <script>
-                // Intenta invocar la impresión nativa del visor incrustado en la laptop
                 setTimeout(function() {{
                     var iframe = document.getElementById('pdf_frame');
                     if (iframe && iframe.contentWindow) {{
@@ -217,7 +213,7 @@ def mostrar_visor_con_impresion(bytes_pdf, titulo_btn="📥 DESCARGAR / IMPRIMIR
             </script>
         """
         st.markdown("---")
-        st.subheader("👀 Vista Previa e Impresión Automática")
+        st.subheader("👀 Vista Previa en Pantalla e Impresión")
         st.markdown(pdf_display, unsafe_allow_html=True)
         st.write("")
         st.download_button(
@@ -434,6 +430,25 @@ if menu == "📝 Registrar Compra (Báscula)":
             
             conexion.commit()
             
+            # Generar texto estilo ticket térmico para pantalla
+            lineas_ticket = []
+            lineas_ticket.append("==================================================")
+            lineas_ticket.append("TICKET DE COMPRA - RECICLADORA DON KILO")
+            lineas_ticket.append("==================================================")
+            lineas_ticket.append(f"Folio: #{c_id}  |  Fecha: {f_act}")
+            lineas_ticket.append(f"Proveedor: {cliente_sel}")
+            lineas_ticket.append("--------------------------------------------------")
+            for item in st.session_state.carrito_compras:
+                mat_str = f"{item['material']:<18}"
+                kg_str = f"{item['kilos']:>5.1f} kg"
+                sub_str = f"${item['subtotal']:>8.2f}"
+                lineas_ticket.append(f"{mat_str} {kg_str}   {sub_str}")
+            lineas_ticket.append("--------------------------------------------------")
+            lineas_ticket.append(f"TOTAL A PAGAR: ${tot_ticket:,.2f}")
+            lineas_ticket.append("==================================================")
+            
+            st.session_state.texto_ticket_pantalla = "\n".join(lineas_ticket)
+            
             bytes_pdf = generar_pdf_ticket(emp_nombre, emp_direccion, emp_telefono, c_id, f_act, turno_actual, cliente_sel, st.session_state.carrito_compras, tot_ticket)
             
             if bytes_pdf:
@@ -447,6 +462,11 @@ if menu == "📝 Registrar Compra (Báscula)":
             
             st.session_state.carrito_compras = []
             st.rerun()
+
+    # Mostrar vista previa estilo texto térmico tal como lo pediste
+    if "texto_ticket_pantalla" in st.session_state and st.session_state.texto_ticket_pantalla:
+        st.markdown("### 🖨️ Vista Previa del Ticket (Estilo Térmico)")
+        st.code(st.session_state.texto_ticket_pantalla, language="")
 
     if "ultimo_pdf_compra" in st.session_state and st.session_state.ultimo_pdf_compra:
         mostrar_visor_con_impresion(st.session_state.ultimo_pdf_compra, "IMPRIMIR TICKET EN LAPTOP")
