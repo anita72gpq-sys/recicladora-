@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from io import BytesIO
+import os
 import sqlite3
 import pandas as pd
 
@@ -221,12 +221,59 @@ menu = st.sidebar.selectbox(
 )
 
 
-# FUNCIONES DE EXPORTACIÓN (EXCEL Y PDF)
-def convertir_df_a_excel(df):
-  output = BytesIO()
-  with pd.ExcelWriter(output, engine="openpyxl") as writer:
-    df.to_excel(writer, index=False, sheet_name="Reporte")
-  return output.getvalue()
+# FUNCIONES DE PDF Y ARCHIVOS LOCALES
+def obtener_ruta_carpeta_tickets():
+  # Crear carpeta local "Tickets_Recicladora" en el equipo/servidor
+  carpeta = os.path.expanduser("~/Tickets_Recicladora")
+  os.makedirs(carpeta, exist_ok=True)
+  return carpeta
+
+
+def generar_pdf_ticket(
+    nombre_emp, dir_emp, tel_emp, folio, fecha, turno, cliente, carrito, total
+):
+  if not PDF_DISPONIBLE:
+    return None
+  from io import BytesIO
+
+  buffer = BytesIO()
+  p = canvas.Canvas(buffer, pagesize=letter)
+  p.setFont("Helvetica-Bold", 14)
+  p.drawString(50, 750, f"♻️ {nombre_emp}")
+  p.setFont("Helvetica", 9)
+  p.drawString(50, 735, f"{dir_emp} | Cel: {tel_emp}")
+  p.line(50, 725, 350, 725)
+
+  p.setFont("Helvetica-Bold", 11)
+  p.drawString(50, 705, f"TICKET DE COMPRA #{folio}")
+  p.setFont("Helvetica", 10)
+  p.drawString(50, 685, f"Fecha: {fecha} | Turno: {turno}")
+  p.drawString(50, 665, f"Proveedor / Cliente: {cliente}")
+  p.line(50, 655, 350, 655)
+
+  y = 635
+  p.setFont("Helvetica-Bold", 9)
+  p.drawString(50, y, "MATERIAL")
+  p.drawString(180, y, "KG")
+  p.drawString(250, y, "SUBTOTAL")
+  y -= 15
+
+  p.setFont("Helvetica", 9)
+  for item in carrito:
+    p.drawString(50, y, str(item["material"]))
+    p.drawString(180, y, f"{item['kilos']:.1f} kg")
+    p.drawString(250, y, f"${item['subtotal']:,.2f}")
+    y -= 15
+
+  p.line(50, y - 5, 350, y - 5)
+  y -= 25
+  p.setFont("Helvetica-Bold", 12)
+  p.drawString(50, y, f"TOTAL A PAGAR: ${total:,.2f} MXN")
+
+  p.showPage()
+  p.save()
+  buffer.seek(0)
+  return buffer.getvalue()
 
 
 def generar_pdf_corte_caja(
@@ -243,10 +290,10 @@ def generar_pdf_corte_caja(
 ):
   if not PDF_DISPONIBLE:
     return None
+  from io import BytesIO
 
   buffer = BytesIO()
   p = canvas.Canvas(buffer, pagesize=letter)
-
   p.setFont("Helvetica-Bold", 16)
   p.drawString(50, 750, f"♻️ {nombre_emp}")
   p.setFont("Helvetica", 10)
@@ -267,11 +314,6 @@ def generar_pdf_corte_caja(
   p.setFont("Helvetica-Bold", 14)
   p.drawString(50, 540, f"EFECTIVO RESTANTE EN CAJA: ${efectivo:,.2f} MXN")
   p.line(50, 525, 550, 525)
-
-  p.setFont("Helvetica-Oblique", 9)
-  p.drawString(
-      50, 480, "Reporte generado automáticamente por el Sistema ERP Don Kilo."
-  )
 
   p.showPage()
   p.save()
@@ -394,7 +436,7 @@ if menu == "📝 Registrar Compra (Báscula)":
 
     st.write("")
     if st.button(
-        "✅ FINALIZAR Y GENERAR TICKET",
+        "✅ FINALIZAR Y GENERAR TICKET PDF",
         type="primary",
         use_container_width=True,
     ):
@@ -419,32 +461,40 @@ if menu == "📝 Registrar Compra (Báscula)":
 
       conexion.commit()
 
-      txt_t = f"========================================\n"
-      txt_t += f"       {emp_nombre.upper()}             \n"
-      txt_t += f"  {emp_direccion}  \n"
-      txt_t += f"  Tel: {emp_telefono} \n"
-      txt_t += f"========================================\n"
-      txt_t += f"Folio: #{c_id} | Fecha: {f_act}\n"
-      txt_t += f"Turno: {turno_actual}\n"
-      txt_t += f"Cliente: {cliente_sel}\n"
-      txt_t += f"----------------------------------------\n"
-      for i in st.session_state.carrito_compras:
-        txt_t += f"{i['material']:<15} {i['kilos']:<6.1f}kg  ${i['subtotal']:<7.2f}\n"
-      txt_t += f"----------------------------------------\n"
-      txt_t += f"TOTAL: ${tot_ticket:,.2f}\n"
-      txt_t += f"========================================\n"
+      # Generar y guardar PDF en carpeta Tickets_Recicladora
+      bytes_pdf = generar_pdf_ticket(
+          emp_nombre,
+          emp_direccion,
+          emp_telefono,
+          c_id,
+          f_act,
+          turno_actual,
+          cliente_sel,
+          st.session_state.carrito_compras,
+          tot_ticket,
+      )
+      if bytes_pdf:
+        carpeta_tk = obtener_ruta_carpeta_tickets()
+        nombre_archivo = os.path.join(
+            carpeta_tk, f"Ticket_Compra_{c_id}.pdf"
+        )
+        with open(nombre_archivo, "wb") as f_pdf:
+          f_pdf.write(bytes_pdf)
 
-      st.success(f"¡Compra #{c_id} registrada con éxito!")
-      st.text(txt_t)
+      st.success(
+          f"¡Compra #{c_id} registrada y guardada en 'Tickets_Recicladora'!"
+      )
 
+      carrito_guardado = st.session_state.carrito_compras.copy()
       st.session_state.carrito_compras = []
 
-      st.download_button(
-          label="📄 Descargar Ticket (.TXT)",
-          data=txt_t,
-          file_name=f"Ticket_{c_id}.txt",
-          mime="text/plain",
-      )
+      if bytes_pdf:
+        st.download_button(
+            label="📄 Descargar Ticket PDF",
+            data=bytes_pdf,
+            file_name=f"Ticket_Compra_{c_id}.pdf",
+            mime="application/pdf",
+        )
 
 # ---------------------------------------------------------
 # OPCIÓN 2: VER INVENTARIO Y PRECIOS
@@ -468,20 +518,11 @@ elif menu == "📦 Ver Inventario y Precios":
   )
   st.dataframe(df_inv, use_container_width=True)
 
-  excel_data = convertir_df_a_excel(df_inv)
-  st.download_button(
-      label="🟢 Descargar Inventario en Excel (.xlsx)",
-      data=excel_data,
-      file_name=f"Inventario_{datetime.now().strftime('%Y%m%d')}.xlsx",
-      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  )
-
 # ---------------------------------------------------------
 # OPCIÓN 3: REGISTRAR VENTA
 # ---------------------------------------------------------
 elif menu == "📤 Registrar Venta (Salida)":
   st.subheader("📤 Registrar Venta de Material")
-
   turno_v = st.selectbox(
       "⏱️ Turno:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"]
   )
@@ -578,7 +619,7 @@ elif menu == "💵 Control de Caja (Fondo / Entradas)":
 # OPCIÓN 5: CORTE DE CAJA POR TURNO Y DÍA
 # ---------------------------------------------------------
 elif menu == "✂️ Corte de Caja por Turno y Día":
-  st.subheader("✂️ Arqueo y Corte de Caja")
+  st.subheader("✂️ Arqueo y Corte de Caja en PDF")
 
   col_f1, col_f2 = st.columns(2)
   with col_f1:
@@ -649,48 +690,33 @@ elif menu == "✂️ Corte de Caja por Turno y Día":
   col3.metric("Comprado en Material", f"${tot_compras:,.2f}")
   col4.metric("Gastos Generales", f"${tot_gastos:,.2f}")
 
-  txt_corte = f"========================================\n"
-  txt_corte += f"       CORTE DE CAJA ({f_corte})       \n"
-  txt_corte += f"       Filtro: {filtro_turno}          \n"
-  txt_corte += f"========================================\n"
-  txt_corte += f"Fondo / Inyecciones:  ${tot_ingresado:,.2f}\n"
-  txt_corte += f"Ventas del Día:       ${tot_ventas:,.2f}\n"
-  txt_corte += f"(-) Compras Material: ${tot_compras:,.2f}\n"
-  txt_corte += f"(-) Gastos Varios:    ${tot_gastos:,.2f}\n"
-  txt_corte += f"----------------------------------------\n"
-  txt_corte += f"EFECTIVO EN CAJA:     ${efectivo_restante:,.2f}\n"
-  txt_corte += f"========================================\n"
-
-  col_d1, col_d2 = st.columns(2)
-  with col_d1:
-    st.download_button(
-        label="📄 Descargar Corte (.TXT)",
-        data=txt_corte,
-        file_name=f"Corte_{f_corte}_{filtro_turno}.txt",
-        mime="text/plain",
+  if PDF_DISPONIBLE:
+    bytes_pdf_corte = generar_pdf_corte_caja(
+        emp_nombre,
+        emp_direccion,
+        emp_telefono,
+        str(f_corte),
+        filtro_turno,
+        efectivo_restante,
+        tot_ingresado,
+        tot_ventas,
+        tot_compras,
+        tot_gastos,
     )
-
-  with col_d2:
-    if PDF_DISPONIBLE:
-      bytes_pdf = generar_pdf_corte_caja(
-          emp_nombre,
-          emp_direccion,
-          emp_telefono,
-          str(f_corte),
-          filtro_turno,
-          efectivo_restante,
-          tot_ingresado,
-          tot_ventas,
-          tot_compras,
-          tot_gastos,
+    if bytes_pdf_corte:
+      carpeta_tk = obtener_ruta_carpeta_tickets()
+      nombre_archivo_corte = os.path.join(
+          carpeta_tk, f"Corte_Caja_{f_corte}_{filtro_turno}.pdf"
       )
-      if bytes_pdf:
-        st.download_button(
-            label="🔴 Descargar Corte en PDF (.PDF)",
-            data=bytes_pdf,
-            file_name=f"Corte_{f_corte}_{filtro_turno}.pdf",
-            mime="application/pdf",
-        )
+      with open(nombre_archivo_corte, "wb") as f_pdf:
+        f_pdf.write(bytes_pdf_corte)
+
+      st.download_button(
+          label="🔴 Descargar Corte de Caja en PDF",
+          data=bytes_pdf_corte,
+          file_name=f"Corte_Caja_{f_corte}_{filtro_turno}.pdf",
+          mime="application/pdf",
+      )
 
 # ---------------------------------------------------------
 # OPCIÓN 6: GASTOS
@@ -739,7 +765,7 @@ elif menu == "💸 Registrar y Administrar Gastos":
 # OPCIÓN 7: REPORTES (DIARIO, SEMANAL, MENSUAL, ANUAL)
 # ---------------------------------------------------------
 elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
-  st.subheader("📊 Reportes Financieros y de Utilidad Neta")
+  st.subheader("📊 Reportes Financieros en PDF")
 
   periodo = st.radio(
       "Seleccione el período de consulta:",
@@ -824,15 +850,44 @@ elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
     )
     st.dataframe(df_rep, use_container_width=True)
 
-    excel_rep = convertir_df_a_excel(df_rep)
-    st.download_button(
-        label=f"🟢 Descargar Reporte ({periodo}) en Excel (.xlsx)",
-        data=excel_rep,
-        file_name=f"Reporte_{periodo}_{datetime.now().strftime('%Y%m%d')}.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        ),
-    )
+    if PDF_DISPONIBLE:
+      from io import BytesIO
+
+      buffer_rep = BytesIO()
+      p_rep = canvas.Canvas(buffer_rep, pagesize=letter)
+      p_rep.setFont("Helvetica-Bold", 14)
+      p_rep.drawString(50, 750, f"♻️ {emp_nombre}")
+      p_rep.setFont("Helvetica", 10)
+      p_rep.drawString(
+          50, 735, f"REPORTE FINANCIERO - PERÍODO: {periodo.upper()}"
+      )
+      p_rep.line(50, 725, 550, 725)
+
+      p_rep.setFont("Helvetica", 10)
+      p_rep.drawString(50, 690, f"Total Inversión Compras: ${tot_compra_dinero:,.2f}")
+      p_rep.drawString(50, 670, f"Utilidad Bruta Est.:     ${util_bruta_per:,.2f}")
+      p_rep.drawString(50, 650, f"Gastos Totales:          ${tot_gastos_per:,.2f}")
+      p_rep.setFont("Helvetica-Bold", 11)
+      p_rep.drawString(50, 620, f"UTILIDAD NETA REAL:      ${util_neta_per:,.2f}")
+
+      p_rep.showPage()
+      p_rep.save()
+      buffer_rep.seek(0)
+      bytes_pdf_rep = buffer_rep.getvalue()
+
+      carpeta_tk = obtener_ruta_carpeta_tickets()
+      nombre_archivo_rep = os.path.join(
+          carpeta_tk, f"Reporte_{periodo}_{datetime.now().strftime('%Y%m%d')}.pdf"
+      )
+      with open(nombre_archivo_rep, "wb") as f_pdf:
+        f_pdf.write(bytes_pdf_rep)
+
+      st.download_button(
+          label=f"🔴 Descargar Reporte ({periodo}) en PDF",
+          data=bytes_pdf_rep,
+          file_name=f"Reporte_{periodo}.pdf",
+          mime="application/pdf",
+      )
   else:
     st.info("No hay registros de compras en el período seleccionado.")
 
@@ -869,3 +924,8 @@ elif menu == "⚙️ Configuración / Datos Empresa":
       st.rerun()
 
 conexion.close()
+```eof
+
+He actualizado el código de tu archivo `app.py` para que:
+1. **Excluya Excel y deje únicamente PDF** para todos los reportes, tickets y cortes de caja.
+2. **Cree y guarde automáticamente todos los archivos PDF** dentro de una carpeta llamada **`Tickets_Recicladora`** en el almacenamiento de tu dispositivo o servidor.
