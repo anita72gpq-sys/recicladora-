@@ -15,7 +15,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # ---------------------------------------------------------
-# CONFIGURACIÓN DE PÁGINA Y TEMA VISUAL (ESTILO ESCRITORIO CLÁSICO)
+# CONFIGURACIÓN DE PÁGINA Y TEMA VISUAL (ESTILO ESCRITORIO VERDE)
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Chatarrería Don Kilo - ERP",
@@ -26,44 +26,48 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .stApp { background-color: #EFEFEF; }
+    .stApp { background-color: #F4F8F5; }
     
+    /* Marcos visuales claros tipo escritorio clásico */
     .win-frame {
-        border: 2px dashed #999999;
-        background-color: #F8F8F8;
-        padding: 15px;
-        border-radius: 6px;
+        border: 2px solid #2E7D32;
+        background-color: #FFFFFF;
+        padding: 18px;
+        border-radius: 8px;
         margin-bottom: 15px;
+        box-shadow: 0px 2px 5px rgba(46, 125, 50, 0.1);
     }
     .win-frame-title {
         font-weight: bold;
-        color: #333333;
-        font-size: 13px;
-        margin-bottom: 10px;
+        color: #1B5E20;
+        font-size: 14px;
+        margin-bottom: 12px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        border-bottom: 1px solid #C8E6C9;
+        padding-bottom: 5px;
     }
 
     .header-box {
-        background: linear-gradient(135deg, #2C3E50 0%, #34495E 100%);
-        color: white; padding: 15px; border-radius: 6px;
+        background: linear-gradient(135deg, #1E4D2B 0%, #2E7D32 100%);
+        color: white; padding: 18px; border-radius: 8px;
         text-align: center; margin-bottom: 20px;
-        border: 1px solid #1A252F;
+        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.15);
     }
     .header-box h1 { color: #FFFFFF !important; margin: 0; font-size: 24px; font-weight: bold; }
-    .header-box p { color: #ECF0F1 !important; margin: 5px 0 0 0; font-size: 13px; }
+    .header-box p { color: #E8F5E9 !important; margin: 5px 0 0 0; font-size: 13px; }
 
+    /* Botones de acción en color verde corporativo */
     div.stButton > button:first-child {
-        background-color: #E1E1E1 !important; 
-        color: #000000 !important;
+        background-color: #2E7D32 !important; 
+        color: #FFFFFF !important;
         font-weight: bold !important; 
-        border-radius: 4px !important;
-        border: 1px solid #ADADAD !important; 
-        padding: 6px 14px !important;
+        border-radius: 6px !important;
+        border: none !important; 
+        padding: 8px 16px !important;
     }
     div.stButton > button:first-child:hover { 
-        background-color: #E5F1FB !important; 
-        border-color: #0078D7 !important;
+        background-color: #1B5E20 !important; 
     }
     </style>
 """, unsafe_allow_html=True)
@@ -190,6 +194,9 @@ if "texto_ticket_pantalla" not in st.session_state:
 if "ultimo_pdf_compra" not in st.session_state:
     st.session_state.ultimo_pdf_compra = None
 
+if "input_kilos_key" not in st.session_state:
+    st.session_state.input_kilos_key = 0
+
 conexion = obtener_conexion()
 cursor = conexion.cursor()
 
@@ -228,7 +235,7 @@ def mostrar_boton_imprimir_termico(texto_ticket):
         <button onclick="
             var ventana = window.open('', '_print', 'height=600,width=400');
             ventana.document.write('<html><head><title>Imprimir Ticket</title>');
-            ventana.document.write('<style>body {{ font-family: monospace; white-space: pre; font-size: 12px; margin: 10px; }}</style>');
+            ventana.document.write('<style>body {{ font-family: monospace; white-space: pre; font-size: 14px; font-weight: bold; margin: 10px; }}</style>');
             ventana.document.write('</head><body>');
             ventana.document.write(`{texto_ticket}`);
             ventana.document.write('</body></html>');
@@ -236,13 +243,13 @@ def mostrar_boton_imprimir_termico(texto_ticket):
             ventana.focus();
             setTimeout(function() {{ ventana.print(); ventana.close(); }}, 250);
         " style="
-            background-color: #E1E1E1;
-            color: #000000;
-            padding: 8px 16px;
-            font-size: 14px;
+            background-color: #2E7D32;
+            color: #FFFFFF;
+            padding: 10px 20px;
+            font-size: 15px;
             font-weight: bold;
-            border: 1px solid #ADADAD;
-            border-radius: 4px;
+            border: none;
+            border-radius: 6px;
             cursor: pointer;
         ">🖨️ Mandar a Imprimir Ticket</button>
     </div>
@@ -298,11 +305,10 @@ def generar_pdf_ticket(nombre_emp, dir_emp, tel_emp, folio, fecha, turno, client
     return buffer.getvalue()
 
 # ---------------------------------------------------------
-# OPCIÓN 1: BÁSCULA DE COMPRA (ESTILO ESCRITORIO)
+# OPCIÓN 1: BÁSCULA DE COMPRA (ESTILO VISUAL VERDE)
 # ---------------------------------------------------------
 if menu == "📝 Registro de Compra (Báscula)":
     
-    # Botón para iniciar nueva compra de inmediato
     col_head1, col_head2 = st.columns([3, 1])
     with col_head1:
         st.markdown("### 📝 REGISTRO DE COMPRA (BÁSCULA)")
@@ -311,25 +317,25 @@ if menu == "📝 Registro de Compra (Báscula)":
             st.session_state.carrito_compras = []
             st.session_state.texto_ticket_pantalla = ""
             st.session_state.ultimo_pdf_compra = None
+            st.session_state.input_kilos_key += 1
             if "atj_mat" in st.session_state:
                 del st.session_state.atj_mat
             st.rerun()
 
-    # Marco 1: Datos Personales / Proveedor (Campo libre directo)
+    # Marco 1: Datos Personales / Proveedor
     st.markdown('<div class="win-frame">', unsafe_allow_html=True)
-    st.markdown('<div class="win-frame-title">Datos Personales / Proveedor</div>', unsafe_allow_html=True)
+    st.markdown('<div class="win-frame-title">👤 Datos Personales / Proveedor</div>', unsafe_allow_html=True)
     
     col_t1, col_t2 = st.columns([2, 2])
     with col_t1:
         turno_actual = st.selectbox("Turno Operativo:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
     with col_t2:
-        # Campo de texto libre para ingresar o escribir el cliente directamente
         cliente_sel = st.text_input("Cliente / Proveedor (Escribir nombre):", value="Público General")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # Marco 2: Atajos rápidos de selección
     st.markdown('<div class="win-frame">', unsafe_allow_html=True)
-    st.markdown('<div class="win-frame-title">Atajos de Selección Rápida</div>', unsafe_allow_html=True)
+    st.markdown('<div class="win-frame-title">⚡ Atajos de Selección Rápida</div>', unsafe_allow_html=True)
     
     cursor.execute("SELECT id, nombre, precio_compra FROM materiales ORDER BY nombre ASC")
     mats_db = cursor.fetchall()
@@ -339,7 +345,7 @@ if menu == "📝 Registro de Compra (Báscula)":
     i = 0
     for mat_n, (m_id, m_p) in dict_mats.items():
         with cols_atajos[i % len(cols_atajos)]:
-            if st.button(f"{mat_n}\n(${m_p:,.2f})", key=f"atajo_{m_id}"):
+            if st.button(f"📦 {mat_n}\n(${m_p:,.2f})", key=f"atajo_{m_id}"):
                 st.session_state.atj_mat = mat_n
                 st.session_state.atj_precio = float(m_p)
         i += 1
@@ -347,7 +353,7 @@ if menu == "📝 Registro de Compra (Báscula)":
 
     # Marco 3: Detalle de Producto / Báscula
     st.markdown('<div class="win-frame">', unsafe_allow_html=True)
-    st.markdown('<div class="win-frame-title">Producto y Pesaje</div>', unsafe_allow_html=True)
+    st.markdown('<div class="win-frame-title">⚖️ Producto y Pesaje</div>', unsafe_allow_html=True)
     
     mat_def_sel = st.session_state.get("atj_mat", list(dict_mats.keys())[0] if dict_mats else "")
     mat_nom = st.selectbox("Material Seleccionado:", list(dict_mats.keys()), index=list(dict_mats.keys()).index(mat_def_sel) if mat_def_sel in dict_mats else 0)
@@ -357,7 +363,7 @@ if menu == "📝 Registro de Compra (Báscula)":
     
     col_m2, col_m3 = st.columns(2)
     with col_m2:
-        kilos = st.number_input("Cantidad (Kilos / Kg):", min_value=0.0, step=0.5, format="%.2f")
+        kilos = st.number_input("Cantidad (Kilos / Kg):", min_value=0.0, value=0.0, step=0.5, format="%.2f", key=f"kilos_input_{st.session_state.input_kilos_key}")
     with col_m3:
         precio = st.number_input("Precio Unitario ($/Kg):", value=float(precio_inicial_sugerido), step=0.5, format="%.2f")
         
@@ -382,10 +388,13 @@ if menu == "📝 Registro de Compra (Báscula)":
                 })
                 if "atj_mat" in st.session_state:
                     del st.session_state.atj_mat
+                
+                st.session_state.input_kilos_key += 1
                 st.success(f"Agregado {kilos} kg de {mat_nom}")
                 st.rerun()
     with col_b2:
         if st.button("🔄 Limpiar Partida"):
+            st.session_state.input_kilos_key += 1
             if "atj_mat" in st.session_state:
                 del st.session_state.atj_mat
             st.rerun()
@@ -393,10 +402,21 @@ if menu == "📝 Registro de Compra (Báscula)":
 
     # Marco 4: Datos de Comprobante / Total a Pagar
     st.markdown('<div class="win-frame">', unsafe_allow_html=True)
-    st.markdown('<div class="win-frame-title">Datos de Comprobante</div>', unsafe_allow_html=True)
+    st.markdown('<div class="win-frame-title">📄 Datos de Comprobante</div>', unsafe_allow_html=True)
     
     if st.session_state.carrito_compras:
         df_car = pd.DataFrame(st.session_state.carrito_compras)
+        
+        st.markdown("""
+            <style>
+            [data-testid="stTable"] td, [data-testid="stDataFrame"] td {
+                font-size: 16px !important;
+                font-weight: bold !important;
+                color: #000000 !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
         st.dataframe(df_car[["material", "kilos", "precio", "subtotal"]].rename(columns={
             "material": "Material", "kilos": "Kilos (Kg)", "precio": "Precio $/Kg", "subtotal": "Subtotal ($)"
         }), use_container_width=True)
@@ -404,7 +424,7 @@ if menu == "📝 Registro de Compra (Báscula)":
         tot_ticket = sum(i["subtotal"] for i in st.session_state.carrito_compras)
         
         st.markdown(f"""
-        <div style="background-color: #E2E2E2; border: 1px solid #CCC; padding: 10px; text-align: right; font-weight: bold; font-size: 18px; color: #000;">
+        <div style="background-color: #E8F5E9; border: 2px solid #2E7D32; padding: 12px; border-radius: 6px; text-align: right; font-weight: bold; font-size: 20px; color: #1B5E20;">
             IMPORTE TOTAL A PAGAR: ${tot_ticket:,.2f} MXN
         </div>
         """, unsafe_allow_html=True)
@@ -413,7 +433,6 @@ if menu == "📝 Registro de Compra (Báscula)":
         if st.button("💾 REGISTRAR E IMPRIMIR TICKET", type="primary", use_container_width=True):
             f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
-            # Registrar cliente automáticamente en la tabla si se escribió uno nuevo
             if cliente_sel and cliente_sel != "Público General":
                 try:
                     cursor.execute("INSERT OR IGNORE INTO clientes (nombre, tipo) VALUES (?, 'Proveedor')", (cliente_sel,))
@@ -460,6 +479,7 @@ if menu == "📝 Registro de Compra (Báscula)":
                 st.success(f"¡Transacción #{c_id} registrada con éxito!")
             
             st.session_state.carrito_compras = []
+            st.session_state.input_kilos_key += 1
             st.rerun()
     else:
         st.info("Aún no hay partidas agregadas al comprobante actual.")
@@ -467,6 +487,14 @@ if menu == "📝 Registro de Compra (Báscula)":
 
     if "texto_ticket_pantalla" in st.session_state and st.session_state.texto_ticket_pantalla:
         st.markdown("### 🖨️ Vista Previa del Comprobante")
+        st.markdown("""
+            <style>
+            code {
+                font-size: 16px !important;
+                font-weight: bold !important;
+            }
+            </style>
+        """, unsafe_allow_html=True)
         st.code(st.session_state.texto_ticket_pantalla, language="")
         mostrar_boton_imprimir_termico(st.session_state.texto_ticket_pantalla)
 
@@ -585,9 +613,9 @@ elif menu == "✂️ Corte de Caja por Turno y Día":
     efectivo_restante = (tot_ingresado + tot_ventas) - (tot_compras + tot_gastos)
     
     st.markdown(f"""
-    <div style="background-color: #E2E2E2; border: 1px solid #CCC; padding: 15px; border-radius: 4px; text-align: center;">
-        <p style="margin:0; font-weight:bold; color: #333;">EFECTIVO RESTANTE EN CAJA ({filtro_turno.upper()})</p>
-        <h2 style="color: #111; margin: 5px 0 0 0;">${efectivo_restante:,.2f} MXN</h2>
+    <div style="background-color: #E8F5E9; border: 2px solid #2E7D32; padding: 15px; border-radius: 6px; text-align: center;">
+        <p style="margin:0; font-weight:bold; color: #1B5E20;">EFECTIVO RESTANTE EN CAJA ({filtro_turno.upper()})</p>
+        <h2 style="color: #2E7D32; margin: 5px 0 0 0;">${efectivo_restante:,.2f} MXN</h2>
     </div>
     """, unsafe_allow_html=True)
     
