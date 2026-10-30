@@ -410,7 +410,6 @@ if menu == "📝 Registro de Compra (Báscula)":
     st.markdown('<div class="win-frame">', unsafe_allow_html=True)
     st.markdown('<div class="win-frame-title">⚖️ Producto y Pesaje</div>', unsafe_allow_html=True)
     
-    # Opción predeterminada libre para ingresar / seleccionar producto
     lista_nombres_mats = list(dict_mats.keys())
     mat_def_sel = st.session_state.get("atj_mat", None)
     
@@ -418,7 +417,6 @@ if menu == "📝 Registro de Compra (Báscula)":
         idx_default = lista_nombres_mats.index(mat_def_sel)
         mat_nom = st.selectbox("Material Seleccionado:", lista_nombres_mats, index=idx_default, key=f"mat_sel_box_{st.session_state.reset_form_trigger}")
     else:
-        # Añade una opción vacía inicial para que quede libre y diga "Ingresar producto / Seleccionar..."
         opciones_select = ["-- Ingrese o seleccione un producto --"] + lista_nombres_mats
         mat_nom_elegido = st.selectbox("Material Seleccionado:", opciones_select, key=f"mat_sel_box_{st.session_state.reset_form_trigger}")
         mat_nom = None if mat_nom_elegido == "-- Ingrese o seleccione un producto --" else mat_nom_elegido
@@ -869,6 +867,21 @@ elif menu == "⚙️ Configuración / Precios / Empresa":
                 conexion.commit()
                 st.success("¡Precios de compra actualizados correctamente en el inventario general!")
                 st.rerun()
+
+    st.markdown("---")
+    st.write("### ⚠️ Reiniciar Datos de Prueba")
+    st.warning("Esto borrará todos los registros de compras, ventas, gastos, movimientos de caja y restablecerá el stock a 0 para que puedas empezar de cero con tus operaciones reales.")
+    if st.button("🗑️ Borrar Todas las Pruebas y Vaciar Base de Datos"):
+        cursor.execute("DELETE FROM compras")
+        cursor.execute("DELETE FROM detalle_compra")
+        cursor.execute("DELETE FROM ventas")
+        cursor.execute("DELETE FROM detalle_venta")
+        cursor.execute("DELETE FROM gastos")
+        cursor.execute("DELETE FROM movimientos_caja")
+        cursor.execute("UPDATE materiales SET stock_kilos = 0.0")
+        conexion.commit()
+        st.success("¡Base de datos limpiada con éxito! Ya puedes iniciar con tus compras reales.")
+        st.rerun()
 
     st.markdown("---")
     st.write("### 🗑️ Eliminar Materiales")
