@@ -28,7 +28,6 @@ st.markdown("""
     <style>
     .stApp { background-color: #E8F0EC; }
     
-    /* Contenedor Principal en forma de Cuadro / Ventana */
     .main-window-box {
         background-color: #FFFFFF;
         border: 2px solid #2E7D32;
@@ -38,7 +37,6 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
-    /* Sub-marcos internos para cada sección */
     .win-frame {
         border: 1px solid #C8E6C9;
         background-color: #F9FBF9;
@@ -66,7 +64,6 @@ st.markdown("""
     .header-box h1 { color: #FFFFFF !important; margin: 0; font-size: 24px; font-weight: bold; }
     .header-box p { color: #E8F5E9 !important; margin: 5px 0 0 0; font-size: 13px; }
 
-    /* Botones de acción en color verde corporativo */
     div.stButton > button:first-child {
         background-color: #2E7D32 !important; 
         color: #FFFFFF !important;
@@ -200,11 +197,11 @@ if "carrito_compras" not in st.session_state:
 if "texto_ticket_pantalla" not in st.session_state:
     st.session_state.texto_ticket_pantalla = ""
 
-if "ultimo_pdf_compra" not in st.session_state:
-    st.session_state.ultimo_pdf_compra = None
-
 if "input_kilos_key" not in st.session_state:
     st.session_state.input_kilos_key = 0
+
+if "reset_form_trigger" not in st.session_state:
+    st.session_state.reset_form_trigger = 0
 
 conexion = obtener_conexion()
 cursor = conexion.cursor()
@@ -313,12 +310,58 @@ def generar_pdf_ticket(nombre_emp, dir_emp, tel_emp, folio, fecha, turno, client
     buffer.seek(0)
     return buffer.getvalue()
 
+def generar_pdf_reporte_general(nombre_emp, dir_emp, tel_emp, titulo_rep, df_datos):
+    if not PDF_DISPONIBLE or df_datos.empty:
+        return None
+    from io import BytesIO
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(50, 750, f"♻️ {nombre_emp}")
+    p.setFont("Helvetica", 9)
+    p.drawString(50, 735, f"{dir_emp} | Cel: {tel_emp}")
+    p.line(50, 725, 550, 725)
+    
+    p.setFont("Helvetica-Bold", 12)
+    p.drawString(50, 700, f"REPORTE: {titulo_rep}")
+    p.setFont("Helvetica", 9)
+    p.drawString(50, 685, f"Fecha de emision: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    p.line(50, 675, 550, 675)
+    
+    y = 650
+    cols = list(df_datos.columns)
+    
+    p.setFont("Helvetica-Bold", 9)
+    x_pos = 50
+    for col in cols:
+        p.drawString(x_pos, y, str(col)[:15])
+        x_pos += 100
+    y -= 15
+    p.line(50, y, 550, y)
+    y -= 15
+    
+    p.setFont("Helvetica", 8)
+    for index, row in df_datos.iterrows():
+        x_pos = 50
+        for col in cols:
+            val = str(row[col])
+            p.drawString(x_pos, y, val[:18])
+            x_pos += 100
+        y -= 15
+        if y < 80:
+            p.showPage()
+            y = 750
+            p.setFont("Helvetica", 8)
+            
+    p.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
 # ---------------------------------------------------------
 # OPCIÓN 1: BÁSCULA DE COMPRA (DENTRO DE CUADRO PRINCIPAL)
 # ---------------------------------------------------------
 if menu == "📝 Registro de Compra (Báscula)":
     
-    # Abrir el cuadro contenedor principal
     st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
     
     col_head1, col_head2 = st.columns([3, 1])
@@ -328,8 +371,8 @@ if menu == "📝 Registro de Compra (Báscula)":
         if st.button("🔄 Nueva Compra", use_container_width=True):
             st.session_state.carrito_compras = []
             st.session_state.texto_ticket_pantalla = ""
-            st.session_state.ultimo_pdf_compra = None
             st.session_state.input_kilos_key += 1
+            st.session_state.reset_form_trigger += 1
             if "atj_mat" in st.session_state:
                 del st.session_state.atj_mat
             st.rerun()
@@ -340,9 +383,9 @@ if menu == "📝 Registro de Compra (Báscula)":
     
     col_t1, col_t2 = st.columns([2, 2])
     with col_t1:
-        turno_actual = st.selectbox("Turno Operativo:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
+        turno_actual = st.selectbox("Turno Operativo:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"], key=f"turno_sel_{st.session_state.reset_form_trigger}")
     with col_t2:
-        cliente_sel = st.text_input("Cliente / Proveedor (Escribir nombre):", value="Público General")
+        cliente_sel = st.text_input("Cliente / Proveedor (Escribir nombre):", value="Público General", key=f"cliente_input_{st.session_state.reset_form_trigger}")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # Marco 2: Atajos rápidos de selección
@@ -367,17 +410,31 @@ if menu == "📝 Registro de Compra (Báscula)":
     st.markdown('<div class="win-frame">', unsafe_allow_html=True)
     st.markdown('<div class="win-frame-title">⚖️ Producto y Pesaje</div>', unsafe_allow_html=True)
     
-    mat_def_sel = st.session_state.get("atj_mat", list(dict_mats.keys())[0] if dict_mats else "")
-    mat_nom = st.selectbox("Material Seleccionado:", list(dict_mats.keys()), index=list(dict_mats.keys()).index(mat_def_sel) if mat_def_sel in dict_mats else 0)
-    mat_id, mat_p_db = dict_mats[mat_nom]
+    # Opción predeterminada libre para ingresar / seleccionar producto
+    lista_nombres_mats = list(dict_mats.keys())
+    mat_def_sel = st.session_state.get("atj_mat", None)
     
-    precio_inicial_sugerido = st.session_state.get("atj_precio", float(mat_p_db))
-    
+    if mat_def_sel and mat_def_sel in dict_mats:
+        idx_default = lista_nombres_mats.index(mat_def_sel)
+        mat_nom = st.selectbox("Material Seleccionado:", lista_nombres_mats, index=idx_default, key=f"mat_sel_box_{st.session_state.reset_form_trigger}")
+    else:
+        # Añade una opción vacía inicial para que quede libre y diga "Ingresar producto / Seleccionar..."
+        opciones_select = ["-- Ingrese o seleccione un producto --"] + lista_nombres_mats
+        mat_nom_elegido = st.selectbox("Material Seleccionado:", opciones_select, key=f"mat_sel_box_{st.session_state.reset_form_trigger}")
+        mat_nom = None if mat_nom_elegido == "-- Ingrese o seleccione un producto --" else mat_nom_elegido
+
+    if mat_nom and mat_nom in dict_mats:
+        mat_id, mat_p_db = dict_mats[mat_nom]
+        precio_inicial_sugerido = st.session_state.get("atj_precio", float(mat_p_db))
+    else:
+        mat_id = None
+        precio_inicial_sugerido = 0.0
+
     col_m2, col_m3 = st.columns(2)
     with col_m2:
         kilos = st.number_input("Cantidad (Kilos / Kg):", min_value=0.0, value=0.0, step=0.5, format="%.2f", key=f"kilos_input_{st.session_state.input_kilos_key}")
     with col_m3:
-        precio = st.number_input("Precio Unitario ($/Kg):", value=float(precio_inicial_sugerido), step=0.5, format="%.2f")
+        precio = st.number_input("Precio Unitario ($/Kg):", value=float(precio_inicial_sugerido), step=0.5, format="%.2f", key=f"precio_input_{st.session_state.reset_form_trigger}")
         
     subtotal = kilos * precio
     st.info(f"Subtotal de Línea: **${subtotal:,.2f} MXN**")
@@ -385,8 +442,10 @@ if menu == "📝 Registro de Compra (Báscula)":
     col_b1, col_b2 = st.columns([3, 1])
     with col_b1:
         if st.button("➕ Agregar al Comprobante", type="primary"):
-            if kilos <= 0:
-                st.warning("Ingrese una cantidad de kilos mayor a 0.")
+            if not mat_nom:
+                st.warning("⚠️ Por favor seleccione o ingrese un producto válido.")
+            elif kilos <= 0:
+                st.warning("⚠️ Ingrese una cantidad de kilos mayor a 0.")
             else:
                 cursor.execute("UPDATE materiales SET precio_compra = ? WHERE id = ?", (precio, mat_id))
                 conexion.commit()
@@ -402,11 +461,13 @@ if menu == "📝 Registro de Compra (Báscula)":
                     del st.session_state.atj_mat
                 
                 st.session_state.input_kilos_key += 1
-                st.success(f"Agregado {kilos} kg de {mat_nom}")
+                st.session_state.reset_form_trigger += 1
+                st.success(f"¡Agregado {kilos} kg de {mat_nom}!")
                 st.rerun()
     with col_b2:
         if st.button("🔄 Limpiar Partida"):
             st.session_state.input_kilos_key += 1
+            st.session_state.reset_form_trigger += 1
             if "atj_mat" in st.session_state:
                 del st.session_state.atj_mat
             st.rerun()
@@ -492,6 +553,7 @@ if menu == "📝 Registro de Compra (Báscula)":
             
             st.session_state.carrito_compras = []
             st.session_state.input_kilos_key += 1
+            st.session_state.reset_form_trigger += 1
             st.rerun()
     else:
         st.info("Aún no hay partidas agregadas al comprobante actual.")
@@ -510,23 +572,29 @@ if menu == "📝 Registro de Compra (Báscula)":
         st.code(st.session_state.texto_ticket_pantalla, language="")
         mostrar_boton_imprimir_termico(st.session_state.texto_ticket_pantalla)
 
-    # Cerrar el cuadro contenedor principal
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # OPCIÓN 2: VER INVENTARIO Y PRECIOS
 # ---------------------------------------------------------
 elif menu == "📦 Ver Inventario y Precios":
+    st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
     st.subheader("📦 Inventario Actual y Precios de Compra")
     cursor.execute("SELECT id, nombre, precio_compra, precio_venta, stock_kilos FROM materiales")
     mats = cursor.fetchall()
     df_inv = pd.DataFrame(mats, columns=["ID", "Material", "Precio Compra ($)", "Precio Venta ($)", "Stock (Kg)"])
     st.dataframe(df_inv, use_container_width=True)
+    
+    pdf_bytes = generar_pdf_reporte_general(emp_nombre, emp_direccion, emp_telefono, "Inventario Actual de Materiales", df_inv)
+    if pdf_bytes:
+        st.download_button("📥 Descargar Desglose en PDF", data=pdf_bytes, file_name="Reporte_Inventario.pdf", mime="application/pdf")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # OPCIÓN 3: REGISTRAR VENTA
 # ---------------------------------------------------------
 elif menu == "📤 Registrar Venta (Salida)":
+    st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
     st.subheader("📤 Registrar Venta de Material")
     turno_v = st.selectbox("⏱️ Turno:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
     comprador = st.text_input("Fundidora / Comprador Final:")
@@ -566,11 +634,13 @@ elif menu == "📤 Registrar Venta (Salida)":
             
             conexion.commit()
             st.success(f"¡Venta #{v_id} registrada por ${tot_v:,.2f}!")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # OPCIÓN 4: CONTROL DE CAJA
 # ---------------------------------------------------------
 elif menu == "💵 Control de Caja (Fondo / Entradas)":
+    st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
     st.subheader("💵 Fondo e Inyecciones de Caja")
     
     with st.form("form_caja_in"):
@@ -589,13 +659,20 @@ elif menu == "💵 Control de Caja (Fondo / Entradas)":
                 st.rerun()
 
     cursor.execute("SELECT id, fecha, turno, tipo, monto, motivo FROM movimientos_caja ORDER BY id DESC")
-    df_caja_movs = pd.DataFrame(cursor.fetchall(), columns=["ID", "Fecha", "Turno", "Tipo", "Monto", "Motivo"])
+    movs_data = cursor.fetchall()
+    df_caja_movs = pd.DataFrame(movs_data, columns=["ID", "Fecha", "Turno", "Tipo", "Monto", "Motivo"])
     st.dataframe(df_caja_movs, use_container_width=True)
+    
+    pdf_bytes = generar_pdf_reporte_general(emp_nombre, emp_direccion, emp_telefono, "Movimientos y Fondo de Caja", df_caja_movs)
+    if pdf_bytes:
+        st.download_button("📥 Descargar Desglose de Caja en PDF", data=pdf_bytes, file_name="Reporte_Caja.pdf", mime="application/pdf")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # OPCIÓN 5: CORTE DE CAJA POR TURNO Y DÍA
 # ---------------------------------------------------------
 elif menu == "✂️ Corte de Caja por Turno y Día":
+    st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
     st.subheader("✂️ Arqueo y Corte de Caja en PDF")
     
     col_f1, col_f2 = st.columns(2)
@@ -640,11 +717,24 @@ elif menu == "✂️ Corte de Caja por Turno y Día":
     col2.metric("Ventas Cobradas", f"${tot_ventas:,.2f}")
     col3.metric("Comprado en Material", f"${tot_compras:,.2f}")
     col4.metric("Gastos Generales", f"${tot_gastos:,.2f}")
+    
+    df_corte_resumen = pd.DataFrame([
+        {"Concepto": "Fondo / Inyecciones", "Monto ($)": tot_ingresado},
+        {"Concepto": "Ventas Cobradas", "Monto ($)": tot_ventas},
+        {"Concepto": "Compras de Material", "Monto ($)": tot_compras},
+        {"Concepto": "Gastos Operativos", "Monto ($)": tot_gastos},
+        {"Concepto": "Efectivo Restante en Caja", "Monto ($)": efectivo_restante}
+    ])
+    pdf_bytes = generar_pdf_reporte_general(emp_nombre, emp_direccion, emp_telefono, f"Corte de Caja - {f_corte.strftime('%Y-%m-%d')} ({filtro_turno})", df_corte_resumen)
+    if pdf_bytes:
+        st.download_button("📥 Descargar Corte de Caja en PDF", data=pdf_bytes, file_name=f"Corte_Caja_{f_corte}.pdf", mime="application/pdf")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # OPCIÓN 6: GASTOS
 # ---------------------------------------------------------
 elif menu == "💸 Registrar y Administrar Gastos":
+    st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
     st.subheader("💸 Registro de Gastos")
     with st.form("fgastos"):
         turno_g = st.selectbox("Turno:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
@@ -661,13 +751,20 @@ elif menu == "💸 Registrar y Administrar Gastos":
                 st.rerun()
 
     cursor.execute("SELECT id, fecha, turno, categoria, descripcion, monto FROM gastos ORDER BY id DESC")
-    df_g = pd.DataFrame(cursor.fetchall(), columns=["ID", "Fecha", "Turno", "Categoría", "Descripción", "Monto"])
+    gastos_data = cursor.fetchall()
+    df_g = pd.DataFrame(gastos_data, columns=["ID", "Fecha", "Turno", "Categoría", "Descripción", "Monto"])
     st.dataframe(df_g, use_container_width=True)
+    
+    pdf_bytes = generar_pdf_reporte_general(emp_nombre, emp_direccion, emp_telefono, "Reporte de Gastos Operativos", df_g)
+    if pdf_bytes:
+        st.download_button("📥 Descargar Desglose de Gastos en PDF", data=pdf_bytes, file_name="Reporte_Gastos.pdf", mime="application/pdf")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # OPCIÓN 7: REPORTES
 # ---------------------------------------------------------
 elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
+    st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
     st.subheader("📊 Reportes Financieros")
     
     periodo = st.radio("Seleccione el período de consulta:", ["Diario (Hoy)", "Semanal", "Mensual", "Anual", "Personalizado"], horizontal=True)
@@ -729,13 +826,19 @@ elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
     if mats_rep:
         df_rep = pd.DataFrame(mats_rep, columns=["Material", "Kilos Comprados", "Inversión ($)", "Utilidad Est. ($)"])
         st.dataframe(df_rep, use_container_width=True)
+        
+        pdf_bytes = generar_pdf_reporte_general(emp_nombre, emp_direccion, emp_telefono, f"Reporte Financiero ({periodo})", df_rep)
+        if pdf_bytes:
+            st.download_button("📥 Descargar Reporte Financiero en PDF", data=pdf_bytes, file_name=f"Reporte_Financiero_{periodo}.pdf", mime="application/pdf")
     else:
         st.info("No hay registros de compras en el período seleccionado.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # OPCIÓN 8: CONFIGURACIÓN / PRECIOS / EMPRESA
 # ---------------------------------------------------------
 elif menu == "⚙️ Configuración / Precios / Empresa":
+    st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
     st.subheader("⚙️ Configuración General, Precios de Compra y Datos de Empresa")
     
     with st.form("form_config_emp"):
@@ -776,5 +879,6 @@ elif menu == "⚙️ Configuración / Precios / Empresa":
             conexion.commit()
             st.error(f"Material '{mat_del}' eliminado.")
             st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 conexion.close()
