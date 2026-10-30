@@ -382,6 +382,7 @@ if menu == "📝 Registrar Compra (Báscula)":
             
             conexion.commit()
             
+            # Generar PDF
             bytes_pdf = generar_pdf_ticket(emp_nombre, emp_direccion, emp_telefono, c_id, f_act, turno_actual, cliente_sel, st.session_state.carrito_compras, tot_ticket)
             
             if bytes_pdf:
@@ -389,17 +390,27 @@ if menu == "📝 Registrar Compra (Báscula)":
                 nombre_archivo = os.path.join(carpeta_tk, f"Ticket_Compra_{c_id}.pdf")
                 with open(nombre_archivo, "wb") as f_pdf:
                     f_pdf.write(bytes_pdf)
-                st.success(f"¡Compra #{c_id} registrada con éxito! Guardado en carpeta 'Tickets_Recicladora'.")
+                st.success(f"¡Compra #{c_id} registrada con éxito! Guardado en la carpeta 'Tickets_Recicladora'.")
                 
-                st.download_button(
-                    label="📥 DESCARGAR / IMPRIMIR TICKET EN PDF",
-                    data=bytes_pdf,
-                    file_name=f"Ticket_Compra_{c_id}.pdf",
-                    mime="application/pdf",
-                    type="primary"
-                )
+                # Guardamos temporalmente en session state para mostrar el botón de descarga sin que desaparezca
+                st.session_state.ultimo_pdf = bytes_pdf
+                st.session_state.ultimo_nombre = f"Ticket_Compra_{c_id}.pdf"
+            else:
+                st.error("Error: No se pudo generar el PDF (Verifique que 'reportlab' esté en requirements.txt).")
             
             st.session_state.carrito_compras = []
+            st.rerun()
+
+    # Mostrar botón de descarga del último ticket generado si existe
+    if "ultimo_pdf" in st.session_state and st.session_state.ultimo_pdf:
+        st.markdown("### 📥 Descargar último ticket generado:")
+        st.download_button(
+            label="📄 DESCARGAR / IMPRIMIR TICKET EN PDF",
+            data=st.session_state.ultimo_pdf,
+            file_name=st.session_state.ultimo_nombre,
+            mime="application/pdf",
+            type="primary"
+        )
 
 # ---------------------------------------------------------
 # OPCIÓN 2: VER INVENTARIO Y PRECIOS
