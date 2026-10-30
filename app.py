@@ -12,6 +12,7 @@ except ImportError:
   PDF_DISPONIBLE = False
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 # ---------------------------------------------------------
 # CONFIGURACIÓN DE PÁGINA Y TEMA VISUAL (VERDE ECOLÓGICO)
@@ -198,12 +199,25 @@ def obtener_ruta_carpeta_tickets():
     os.makedirs(carpeta, exist_ok=True)
     return carpeta
 
-def mostrar_visor_pdf(bytes_pdf, titulo_btn="📥 DESCARGAR / IMPRIMIR PDF"):
+def mostrar_visor_con_impresion(bytes_pdf, titulo_btn="📥 DESCARGAR / IMPRIMIR PDF"):
     if bytes_pdf:
         base64_pdf = base64.b64encode(bytes_pdf).decode('utf-8')
-        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="500px" type="application/pdf"></iframe>'
+        
+        # Visor integrado en pantalla junto con la orden de impresión automática de JavaScript
+        pdf_display = f"""
+            <iframe id="pdf_frame" src="data:application/pdf;base64,{base64_pdf}" width="100%" height="500px" type="application/pdf"></iframe>
+            <script>
+                // Intenta invocar la impresión nativa del visor incrustado en la laptop
+                setTimeout(function() {{
+                    var iframe = document.getElementById('pdf_frame');
+                    if (iframe && iframe.contentWindow) {{
+                        iframe.contentWindow.print();
+                    }}
+                }}, 1000);
+            </script>
+        """
         st.markdown("---")
-        st.subheader("👀 Vista Previa en Pantalla")
+        st.subheader("👀 Vista Previa e Impresión Automática")
         st.markdown(pdf_display, unsafe_allow_html=True)
         st.write("")
         st.download_button(
@@ -435,7 +449,7 @@ if menu == "📝 Registrar Compra (Báscula)":
             st.rerun()
 
     if "ultimo_pdf_compra" in st.session_state and st.session_state.ultimo_pdf_compra:
-        mostrar_visor_pdf(st.session_state.ultimo_pdf_compra, "DESCARGAR / IMPRIMIR TICKET DE COMPRA")
+        mostrar_visor_con_impresion(st.session_state.ultimo_pdf_compra, "IMPRIMIR TICKET EN LAPTOP")
 
 # ---------------------------------------------------------
 # OPCIÓN 2: VER INVENTARIO Y PRECIOS
@@ -573,7 +587,7 @@ elif menu == "✂️ Corte de Caja por Turno y Día":
             with open(nombre_archivo_corte, "wb") as f_pdf:
                 f_pdf.write(bytes_pdf_corte)
                 
-            mostrar_visor_pdf(bytes_pdf_corte, "DESCARGAR / IMPRIMIR CORTE DE CAJA")
+            mostrar_visor_con_impresion(bytes_pdf_corte, "IMPRIMIR CORTE DE CAJA")
 
 # ---------------------------------------------------------
 # OPCIÓN 6: GASTOS
@@ -691,7 +705,7 @@ elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
             with open(nombre_archivo_rep, "wb") as f_pdf:
                 f_pdf.write(bytes_pdf_rep)
                 
-            mostrar_visor_pdf(bytes_pdf_rep, f"DESCARGAR / IMPRIMIR REPORTE ({periodo.upper()})")
+            mostrar_visor_con_impresion(bytes_pdf_rep, f"IMPRIMIR REPORTE ({periodo.upper()})")
     else:
         st.info("No hay registros de compras en el período seleccionado.")
 
