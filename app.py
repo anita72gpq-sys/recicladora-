@@ -168,14 +168,12 @@ if "carrito_compras" not in st.session_state:
 conexion = obtener_conexion()
 cursor = conexion.cursor()
 
-# Cargar Info Empresa
 cursor.execute("SELECT nombre, direccion, telefono FROM config_empresa LIMIT 1")
 empresa_info = cursor.fetchone()
 emp_nombre = empresa_info[0] if empresa_info else "Chatarrería Don Kilo"
-emp_direccion = empresa_info[1] if empresa_info else "Calle 31 lote 772 casa 182 fracc. Villa Jardin, Mérida, Yucatán"
+emp_direccion = empresa_info[1] if empresa_info else "Mérida, Yucatán"
 emp_telefono = empresa_info[2] if empresa_info else "984-533-8681"
 
-# ENCABEZADO
 st.markdown(f"""
     <div class="header-box">
         <h1>♻️ {emp_nombre}</h1>
@@ -183,7 +181,6 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-# MENÚ PRINCIPAL
 menu = st.sidebar.selectbox("📋 Menú Principal", [
     "📝 Registrar Compra (Báscula)",
     "📦 Ver Inventario y Precios",
@@ -195,9 +192,6 @@ menu = st.sidebar.selectbox("📋 Menú Principal", [
     "⚙️ Configuración / Datos Empresa"
 ])
 
-# ---------------------------------------------------------
-# FUNCIONES DE CARPETA Y PDF
-# ---------------------------------------------------------
 def obtener_ruta_carpeta_tickets():
     carpeta = os.path.abspath("Tickets_Recicladora")
     os.makedirs(carpeta, exist_ok=True)
@@ -213,30 +207,35 @@ def generar_pdf_ticket(nombre_emp, dir_emp, tel_emp, folio, fecha, turno, client
     p.drawString(50, 750, f"♻️ {nombre_emp}")
     p.setFont("Helvetica", 9)
     p.drawString(50, 735, f"{dir_emp} | Cel: {tel_emp}")
-    p.line(50, 725, 450, 725)
+    p.line(50, 725, 500, 725)
     
     p.setFont("Helvetica-Bold", 11)
     p.drawString(50, 705, f"TICKET DE COMPRA #{folio}")
     p.setFont("Helvetica", 10)
     p.drawString(50, 685, f"Fecha: {fecha} | Turno: {turno}")
     p.drawString(50, 665, f"Proveedor / Cliente: {cliente}")
-    p.line(50, 655, 450, 655)
+    p.line(50, 655, 500, 655)
     
     y = 635
     p.setFont("Helvetica-Bold", 9)
     p.drawString(50, y, "MATERIAL")
-    p.drawString(220, y, "KG")
-    p.drawString(320, y, "SUBTOTAL")
+    p.drawString(220, y, "KILOS (KG)")
+    p.drawString(320, y, "PRECIO/KG")
+    p.drawString(420, y, "SUBTOTAL")
     y -= 15
     
     p.setFont("Helvetica", 9)
     for item in carrito:
         p.drawString(50, y, str(item['material']))
-        p.drawString(220, y, f"{item['kilos']:.1f} kg")
-        p.drawString(320, y, f"${item['subtotal']:,.2f}")
-        y -= 15
-        
-    p.line(50, y - 5, 450, y - 5)
+        p.drawString(220, y, f"{item['kilos']:.2f} kg")
+        p.drawString(320, y, f"${item['precio']:,.2f}")
+        p.drawString(420, y, f"${item['subtotal']:,.2f}")
+        y -= 18
+        if y < 100:
+            p.showPage()
+            y = 750
+            
+    p.line(50, y - 5, 500, y - 5)
     y -= 25
     p.setFont("Helvetica-Bold", 12)
     p.drawString(50, y, f"TOTAL A PAGAR: ${total:,.2f} MXN")
@@ -279,10 +278,10 @@ def generar_pdf_corte_caja(nombre_emp, dir_emp, tel_emp, fecha_str, turno_str, e
     return buffer.getvalue()
 
 # ---------------------------------------------------------
-# OPCIÓN 1: BÁSCULA DE COMPRA
+# OPCIÓN 1: BÁSCULA DE COMPRA (CON ATAJOS / BOTONES RÁPIDOS)
 # ---------------------------------------------------------
 if menu == "📝 Registrar Compra (Báscula)":
-    st.subheader("🛒 Registro Rápido de Compra")
+    st.subheader("🛒 Registro Rápido de Compra con Atajos")
     
     col_t1, col_t2 = st.columns([2, 2])
     with col_t1:
@@ -311,46 +310,70 @@ if menu == "📝 Registrar Compra (Báscula)":
                         st.error("El cliente ya existe.")
 
     st.markdown("---")
-    st.write("### ➕ Agregar Material")
+    st.write("### ⚡ Atajos de Compras Rápidas (Clic para rellenar)")
     
     cursor.execute("SELECT id, nombre, precio_compra FROM materiales ORDER BY nombre ASC")
     mats_db = cursor.fetchall()
+    dict_mats = {m[1]: (m[0], m[2]) for m in mats_db}
     
-    if mats_db:
-        dict_mats = {m[1]: (m[0], m[2]) for m in mats_db}
-        col_m1, col_m2, col_m3 = st.columns([3, 2, 2])
-        with col_m1:
-            mat_nom = st.selectbox("Material:", list(dict_mats.keys()))
-            mat_id, mat_p = dict_mats[mat_nom]
-        with col_m2:
-            kilos = st.number_input("Kilos (Kg):", min_value=0.0, step=0.5, format="%.2f")
-        with col_m3:
-            precio = st.number_input("Precio $/Kg:", value=float(mat_p), step=0.5, format="%.2f")
-            
-        subtotal = kilos * precio
-        
-        col_b1, col_b2 = st.columns([3, 1])
-        with col_b1:
-            if st.button("📥 Agregar a la Lista", type="primary"):
-                if kilos <= 0:
-                    st.warning("Ingrese cantidad de kilos mayor a 0.")
-                else:
-                    st.session_state.carrito_compras.append({
-                        "material_id": mat_id,
-                        "material": mat_nom,
-                        "kilos": kilos,
-                        "precio": precio,
-                        "subtotal": subtotal
-                    })
-                    st.success(f"Agregado {kilos} kg de {mat_nom}")
-                    st.rerun()
-        with col_b2:
-            if st.button("🔄 Limpiar Ticket"):
-                st.session_state.carrito_compras = []
-                st.rerun()
+    # Botones de atajos rápidos organizados en columnas
+    cols_atajos = st.columns(len(dict_mats) if len(dict_mats) > 0 else 1)
+    material_preseleccionado = None
+    precio_preseleccionado = 0.0
+    
+    i = 0
+    for mat_n, (m_id, m_p) in dict_mats.items():
+        with cols_atajos[i % len(cols_atajos)]:
+            if st.button(f"📦 {mat_n}\n(${m_p:,.2f})", key=f"atajo_{m_id}"):
+                st.session_state.atj_mat = mat_n
+                st.session_state.atj_precio = float(m_p)
+        i += 1
 
     st.markdown("---")
-    st.write("### 📄 Ticket Actual:")
+    st.write("### ➕ Agregar Material a la Báscula")
+    
+    mat_def_sel = st.session_state.get("atj_mat", list(dict_mats.keys())[0] if dict_mats else "")
+    mat_nom = st.selectbox("Material:", list(dict_mats.keys()), index=list(dict_mats.keys()).index(mat_def_sel) if mat_def_sel in dict_mats else 0)
+    mat_id, mat_p_db = dict_mats[mat_nom]
+    
+    precio_inicial_sugerido = st.session_state.get("atj_precio", float(mat_p_db))
+    
+    col_m2, col_m3 = st.columns(2)
+    with col_m2:
+        kilos = st.number_input("Kilos (Kg):", min_value=0.0, step=0.5, format="%.2f")
+    with col_m3:
+        precio = st.number_input("Precio $/Kg (Editable):", value=float(precio_inicial_sugerido), step=0.5, format="%.2f")
+        
+    subtotal = kilos * precio
+    st.info(f"Subtotal calculado: **${subtotal:,.2f} MXN**")
+    
+    col_b1, col_b2 = st.columns([3, 1])
+    with col_b1:
+        if st.button("📥 Agregar a la Lista del Ticket", type="primary"):
+            if kilos <= 0:
+                st.warning("Ingrese una cantidad de kilos mayor a 0.")
+            else:
+                st.session_state.carrito_compras.append({
+                    "material_id": mat_id,
+                    "material": mat_nom,
+                    "kilos": kilos,
+                    "precio": precio,
+                    "subtotal": subtotal
+                })
+                # Limpiamos el atajo temporal
+                if "atj_mat" in st.session_state:
+                    del st.session_state.atj_mat
+                st.success(f"Agregado {kilos} kg de {mat_nom} a ${precio}/kg")
+                st.rerun()
+    with col_b2:
+        if st.button("🔄 Limpiar Ticket"):
+            st.session_state.carrito_compras = []
+            if "atj_mat" in st.session_state:
+                del st.session_state.atj_mat
+            st.rerun()
+
+    st.markdown("---")
+    st.write("### 📄 Contenido Actual del Ticket:")
     
     if st.session_state.carrito_compras:
         df_car = pd.DataFrame(st.session_state.carrito_compras)
@@ -368,7 +391,7 @@ if menu == "📝 Registrar Compra (Báscula)":
         """, unsafe_allow_html=True)
         
         st.write("")
-        if st.button("✅ FINALIZAR Y GENERAR TICKET PDF", type="primary", use_container_width=True):
+        if st.button("✅ FINALIZAR Y GUARDAR TICKET EN PDF", type="primary", use_container_width=True):
             f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             cursor.execute("INSERT INTO compras (fecha, cliente, total_pagado, turno) VALUES (?, ?, ?, ?)",
                            (f_act, cliente_sel, tot_ticket, turno_actual))
@@ -382,7 +405,6 @@ if menu == "📝 Registrar Compra (Báscula)":
             
             conexion.commit()
             
-            # Generar PDF
             bytes_pdf = generar_pdf_ticket(emp_nombre, emp_direccion, emp_telefono, c_id, f_act, turno_actual, cliente_sel, st.session_state.carrito_compras, tot_ticket)
             
             if bytes_pdf:
@@ -392,16 +414,12 @@ if menu == "📝 Registrar Compra (Báscula)":
                     f_pdf.write(bytes_pdf)
                 st.success(f"¡Compra #{c_id} registrada con éxito! Guardado en la carpeta 'Tickets_Recicladora'.")
                 
-                # Guardamos temporalmente en session state para mostrar el botón de descarga sin que desaparezca
                 st.session_state.ultimo_pdf = bytes_pdf
                 st.session_state.ultimo_nombre = f"Ticket_Compra_{c_id}.pdf"
-            else:
-                st.error("Error: No se pudo generar el PDF (Verifique que 'reportlab' esté en requirements.txt).")
             
             st.session_state.carrito_compras = []
             st.rerun()
 
-    # Mostrar botón de descarga del último ticket generado si existe
     if "ultimo_pdf" in st.session_state and st.session_state.ultimo_pdf:
         st.markdown("### 📥 Descargar último ticket generado:")
         st.download_button(
