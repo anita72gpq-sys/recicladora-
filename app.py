@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import io
 import os
 import sqlite3
 import pandas as pd
@@ -14,64 +15,31 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Estilos CSS personalizados para mejorar botones, tarjetas y colores verdes
 st.markdown(
     """
     <style>
-    /* Fondo y colores principales */
-    .stApp {
-        background-color: #F4F8F5;
-    }
-    
-    /* Encabezado Principal */
+    .stApp { background-color: #F4F8F5; }
     .header-box {
         background: linear-gradient(135deg, #1E4D2B 0%, #2E7D32 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 12px;
-        text-align: center;
-        margin-bottom: 25px;
+        color: white; padding: 20px; border-radius: 12px;
+        text-align: center; margin-bottom: 25px;
         box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.15);
     }
-    .header-box h1 {
-        color: #FFFFFF !important;
-        margin: 0;
-        font-weight: 800;
-    }
-    .header-box p {
-        color: #E8F5E9 !important;
-        margin: 5px 0 0 0;
-        font-size: 15px;
-    }
+    .header-box h1 { color: #FFFFFF !important; margin: 0; font-weight: 800; }
+    .header-box p { color: #E8F5E9 !important; margin: 5px 0 0 0; font-size: 15px; }
 
-    /* Botones primarios en verde destacado */
     div.stButton > button:first-child {
-        background-color: #2E7D32 !important;
-        color: white !important;
-        font-weight: bold !important;
-        border-radius: 8px !important;
-        border: none !important;
-        padding: 8px 16px !important;
+        background-color: #2E7D32 !important; color: white !important;
+        font-weight: bold !important; border-radius: 8px !important;
+        border: none !important; padding: 8px 16px !important;
     }
-    div.stButton > button:first-child:hover {
-        background-color: #1B5E20 !important;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
+    div.stButton > button:first-child:hover { background-color: #1B5E20 !important; }
 
-    /* Métrica / Total destacado */
     .total-card {
-        background-color: #E8F5E9;
-        border-left: 6px solid #2E7D32;
-        padding: 15px;
-        border-radius: 8px;
-        text-align: center;
-        margin-top: 10px;
+        background-color: #E8F5E9; border-left: 6px solid #2E7D32;
+        padding: 15px; border-radius: 8px; text-align: center; margin-top: 10px;
     }
-    .total-card h2 {
-        color: #1B5E20;
-        margin: 0;
-        font-size: 32px;
-    }
+    .total-card h2 { color: #1B5E20; margin: 0; font-size: 32px; }
     </style>
 """,
     unsafe_allow_html=True,
@@ -79,18 +47,16 @@ st.markdown(
 
 
 # ---------------------------------------------------------
-# BASE DE DATOS Y CONEXIÓN
+# BASE DE DATOS
 # ---------------------------------------------------------
 def obtener_conexion():
-  ruta_bd = os.path.expanduser("~/recicladora.db")
-  return sqlite3.connect(ruta_bd)
+  return sqlite3.connect("recicladora.db", check_same_thread=False)
 
 
 def inicializar_bd():
   conexion = obtener_conexion()
   cursor = conexion.cursor()
 
-  # Tablas
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS config_empresa (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,7 +87,8 @@ def inicializar_bd():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             fecha TEXT NOT NULL,
             cliente TEXT NOT NULL,
-            total_pagado REAL NOT NULL
+            total_pagado REAL NOT NULL,
+            turno TEXT DEFAULT 'Turno 1'
         )
     """)
   cursor.execute("""
@@ -138,7 +105,8 @@ def inicializar_bd():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             fecha TEXT NOT NULL,
             comprador TEXT NOT NULL,
-            total_cobrado REAL NOT NULL
+            total_cobrado REAL NOT NULL,
+            turno TEXT DEFAULT 'Turno 1'
         )
     """)
   cursor.execute("""
@@ -156,7 +124,8 @@ def inicializar_bd():
             fecha TEXT NOT NULL,
             categoria TEXT NOT NULL,
             descripcion TEXT,
-            monto REAL NOT NULL
+            monto REAL NOT NULL,
+            turno TEXT DEFAULT 'Turno 1'
         )
     """)
   cursor.execute("""
@@ -165,11 +134,11 @@ def inicializar_bd():
             fecha TEXT NOT NULL,
             tipo TEXT NOT NULL,
             monto REAL NOT NULL,
-            motivo TEXT
+            motivo TEXT,
+            turno TEXT DEFAULT 'Turno 1'
         )
     """)
 
-  # Datos por defecto de la empresa
   cursor.execute("SELECT COUNT(*) FROM config_empresa")
   if cursor.fetchone()[0] == 0:
     cursor.execute(
@@ -182,7 +151,6 @@ def inicializar_bd():
         ),
     )
 
-  # Materiales iniciales
   cursor.execute("SELECT COUNT(*) FROM materiales")
   if cursor.fetchone()[0] == 0:
     materiales_iniciales = [
@@ -204,21 +172,20 @@ def inicializar_bd():
 
 inicializar_bd()
 
-# Inicializar Carrito de Compras en Estado de Sesión
 if "carrito_compras" not in st.session_state:
   st.session_state.carrito_compras = []
 
 conexion = obtener_conexion()
 cursor = conexion.cursor()
 
-# Cargar datos de la empresa
+# Cargar Info Empresa
 cursor.execute("SELECT nombre, direccion, telefono FROM config_empresa LIMIT 1")
 empresa_info = cursor.fetchone()
 emp_nombre = empresa_info[0] if empresa_info else "Chatarrería Don Kilo"
-emp_direccion = empresa_info[1] if empresa_info else "Dirección no registrada"
-emp_telefono = empresa_info[2] if empresa_info else "Tel. S/N"
+emp_direccion = empresa_info[1] if empresa_info else "Mérida, Yucatán"
+emp_telefono = empresa_info[2] if empresa_info else "999-000-0000"
 
-# ENCABEZADO DE LA APLICACIÓN
+# ENCABEZADO
 st.markdown(
     f"""
     <div class="header-box">
@@ -229,28 +196,43 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# MENÚ LATERAL
+# MENÚ PRINCIPAL
 menu = st.sidebar.selectbox(
     "📋 Menú Principal",
     [
-        "📝 Registrar Nueva Compra (Báscula)",
+        "📝 Registrar Compra (Báscula)",
         "📦 Ver Inventario y Precios",
         "📤 Registrar Venta (Salida)",
         "💵 Control de Caja (Fondo / Entradas)",
-        "✂️ Corte de Caja Diario",
+        "✂️ Corte de Caja por Turno y Día",
         "💸 Registrar y Administrar Gastos",
-        "📊 Reportes de Compras y Utilidad",
+        "📊 Reportes (Diario, Semanal, Mensual, Anual)",
         "⚙️ Configuración / Datos Empresa",
     ],
 )
 
-# ---------------------------------------------------------
-# OPCIÓN 1: REGISTRAR NUEVA COMPRA (BÁSCULA RÁPIDA)
-# ---------------------------------------------------------
-if menu == "📝 Registrar Nueva Compra (Báscula)":
-  st.subheader("🛒 Registro Rápido de Compra de Materiales")
 
-  # Obtener Clientes / Proveedores
+# EXPORTAR A EXCEL
+def convertir_df_a_excel(df):
+  output = io.BytesIO()
+  with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    df.to_excel(writer, index=False, sheet_name="Reporte")
+  return output.getvalue()
+
+
+# ---------------------------------------------------------
+# OPCIÓN 1: BÁSCULA DE COMPRA
+# ---------------------------------------------------------
+if menu == "📝 Registrar Compra (Báscula)":
+  st.subheader("🛒 Registro Rápido de Compra")
+
+  col_t1, col_t2 = st.columns([2, 2])
+  with col_t1:
+    turno_actual = st.selectbox(
+        "⏱️ Turno Actual:",
+        ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"],
+    )
+
   cursor.execute("SELECT nombre FROM clientes ORDER BY nombre ASC")
   lista_clientes = [c[0] for c in cursor.fetchall()]
   if "Público General" not in lista_clientes:
@@ -258,84 +240,77 @@ if menu == "📝 Registrar Nueva Compra (Báscula)":
 
   col_cli1, col_cli2 = st.columns([3, 1])
   with col_cli1:
-    cliente_seleccionado = st.selectbox(
-        "👤 Seleccione Proveedor / Cliente:", lista_clientes
-    )
+    cliente_sel = st.selectbox("👤 Proveedor / Cliente:", lista_clientes)
   with col_cli2:
-    st.write("¿Nuevo Cliente?")
     with st.popover("➕ Agregar Cliente"):
-      nuevo_cli_nombre = st.text_input("Nombre Completo:")
-      nuevo_cli_tel = st.text_input("Teléfono Celular:")
+      cli_nom = st.text_input("Nombre Completo:")
+      cli_tel = st.text_input("Teléfono Celular:")
       if st.button("Guardar Cliente"):
-        if nuevo_cli_nombre:
+        if cli_nom:
           try:
             cursor.execute(
                 "INSERT INTO clientes (nombre, telefono) VALUES (?, ?)",
-                (nuevo_cli_nombre, nuevo_cli_tel),
+                (cli_nom, cli_tel),
             )
             conexion.commit()
-            st.success(f"¡Cliente '{nuevo_cli_nombre}' guardado!")
+            st.success("¡Cliente guardado!")
             st.rerun()
           except Exception:
-            st.error("El cliente ya está registrado.")
+            st.error("El cliente ya existe.")
 
   st.markdown("---")
-  st.write("### ➕ Agregar Material a la Compra Actual")
+  st.write("### ➕ Agregar Material")
 
   cursor.execute(
       "SELECT id, nombre, precio_compra FROM materiales ORDER BY nombre ASC"
   )
-  materiales_db = cursor.fetchall()
+  mats_db = cursor.fetchall()
 
-  if materiales_db:
-    dict_mat = {m[1]: (m[0], m[2]) for m in materiales_db}
-
+  if mats_db:
+    dict_mats = {m[1]: (m[0], m[2]) for m in mats_db}
     col_m1, col_m2, col_m3 = st.columns([3, 2, 2])
     with col_m1:
-      mat_nombre_sel = st.selectbox(
-          "Seleccione Material:", list(dict_mat.keys())
-      )
-      mat_id, mat_precio = dict_mat[mat_nombre_sel]
+      mat_nom = st.selectbox("Material:", list(dict_mats.keys()))
+      mat_id, mat_p = dict_mats[mat_nom]
     with col_m2:
-      kilos_ingresados = st.number_input(
+      kilos = st.number_input(
           "Kilos (Kg):", min_value=0.0, step=0.5, format="%.2f"
       )
     with col_m3:
-      precio_aplicado = st.number_input(
-          "Precio $/Kg:", value=float(mat_precio), step=0.5, format="%.2f"
+      precio = st.number_input(
+          "Precio $/Kg:", value=float(mat_p), step=0.5, format="%.2f"
       )
 
-    subtotal_item = kilos_ingresados * precio_aplicado
+    subtotal = kilos * precio
 
-    col_btn_add, col_btn_clr = st.columns([3, 1])
-    with col_btn_add:
-      if st.button("📥 Agregar Producto a la Lista", type="primary"):
-        if kilos_ingresados <= 0:
-          st.warning("⚠️ Ingrese una cantidad de kilos mayor a 0.")
+    col_b1, col_b2 = st.columns([3, 1])
+    with col_b1:
+      if st.button("📥 Agregar a la Lista", type="primary"):
+        if kilos <= 0:
+          st.warning("Ingrese cantidad de kilos mayor a 0.")
         else:
           st.session_state.carrito_compras.append({
               "material_id": mat_id,
-              "material": mat_nombre_sel,
-              "kilos": kilos_ingresados,
-              "precio": precio_aplicado,
-              "subtotal": subtotal_item,
+              "material": mat_nom,
+              "kilos": kilos,
+              "precio": precio,
+              "subtotal": subtotal,
           })
-          st.success(f"Added {kilos_ingresados} kg de {mat_nombre_sel}")
+          st.success(f"Agregado {kilos} kg de {mat_nom}")
           st.rerun()
 
-    with col_btn_clr:
-      if st.button("🔄 Iniciar Nueva Compra"):
+    with col_b2:
+      if st.button("🔄 Limpiar Ticket"):
         st.session_state.carrito_compras = []
         st.rerun()
 
-  # DETALLE DEL TICKET ACTUAL
   st.markdown("---")
-  st.write("### 📄 Materiales en este Ticket:")
+  st.write("### 📄 Ticket Actual:")
 
   if st.session_state.carrito_compras:
-    df_carrito = pd.DataFrame(st.session_state.carrito_compras)
+    df_car = pd.DataFrame(st.session_state.carrito_compras)
     st.dataframe(
-        df_carrito[["material", "kilos", "precio", "subtotal"]].rename(
+        df_car[["material", "kilos", "precio", "subtotal"]].rename(
             columns={
                 "material": "Material",
                 "kilos": "Kilos (Kg)",
@@ -346,15 +321,13 @@ if menu == "📝 Registrar Nueva Compra (Báscula)":
         use_container_width=True,
     )
 
-    total_ticket = sum(
-        item["subtotal"] for item in st.session_state.carrito_compras
-    )
+    tot_ticket = sum(i["subtotal"] for i in st.session_state.carrito_compras)
 
     st.markdown(
         f"""
         <div class="total-card">
-            <p style="margin:0; color:#2E7D32; font-weight:bold;">TOTAL A PAGAR AL CLIENTE</p>
-            <h2>${total_ticket:,.2f} MXN</h2>
+            <p style="margin:0; font-weight:bold;">TOTAL A PAGAR</p>
+            <h2>${tot_ticket:,.2f} MXN</h2>
         </div>
         """,
         unsafe_allow_html=True,
@@ -362,22 +335,23 @@ if menu == "📝 Registrar Nueva Compra (Báscula)":
 
     st.write("")
     if st.button(
-        "✅ FINALIZAR Y IMPRIMIR TICKET DE COMPRA",
+        "✅ FINALIZAR Y GENERAR TICKET",
         type="primary",
         use_container_width=True,
     ):
-      fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
+      f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
       cursor.execute(
-          "INSERT INTO compras (fecha, cliente, total_pagado) VALUES (?, ?, ?)",
-          (fecha_actual, cliente_seleccionado, total_ticket),
+          "INSERT INTO compras (fecha, cliente, total_pagado, turno) VALUES (?,"
+          " ?, ?, ?)",
+          (f_act, cliente_sel, tot_ticket, turno_actual),
       )
-      compra_id = cursor.lastrowid
+      c_id = cursor.lastrowid
 
       for item in st.session_state.carrito_compras:
         cursor.execute(
             "INSERT INTO detalle_compra (compra_id, material_id, kilos,"
             " subtotal) VALUES (?, ?, ?, ?)",
-            (compra_id, item["material_id"], item["kilos"], item["subtotal"]),
+            (c_id, item["material_id"], item["kilos"], item["subtotal"]),
         )
         cursor.execute(
             "UPDATE materiales SET stock_kilos = stock_kilos + ? WHERE id = ?",
@@ -386,74 +360,79 @@ if menu == "📝 Registrar Nueva Compra (Báscula)":
 
       conexion.commit()
 
-      # Ticket de Texto Formateado
-      texto_ticket = f"========================================\n"
-      texto_ticket += f"       {emp_nombre.upper()}             \n"
-      texto_ticket += f"  {emp_direccion}  \n"
-      texto_ticket += f"  Tel/Cel: {emp_telefono} \n"
-      texto_ticket += f"========================================\n"
-      texto_ticket += f"Folio: #{compra_id} | Fecha: {fecha_actual}\n"
-      texto_ticket += f"Cliente/Proveedor: {cliente_seleccionado}\n"
-      texto_ticket += f"----------------------------------------\n"
-      for item in st.session_state.carrito_compras:
-        texto_ticket += f"{item['material']:<15} {item['kilos']:<6.1f}kg  ${item['subtotal']:<7.2f}\n"
-      texto_ticket += f"----------------------------------------\n"
-      texto_ticket += f"TOTAL PAGADO: ${total_ticket:,.2f}\n"
-      texto_ticket += f"========================================\n"
-      texto_ticket += f"      ¡Gracias por su confianza!       \n"
+      txt_t = f"========================================\n"
+      txt_t += f"       {emp_nombre.upper()}             \n"
+      txt_t += f"  {emp_direccion}  \n"
+      txt_t += f"  Tel: {emp_telefono} \n"
+      txt_t += f"========================================\n"
+      txt_t += f"Folio: #{c_id} | Fecha: {f_act}\n"
+      txt_t += f"Turno: {turno_actual}\n"
+      txt_t += f"Cliente: {cliente_sel}\n"
+      txt_t += f"----------------------------------------\n"
+      for i in st.session_state.carrito_compras:
+        txt_t += f"{i['material']:<15} {i['kilos']:<6.1f}kg  ${i['subtotal']:<7.2f}\n"
+      txt_t += f"----------------------------------------\n"
+      txt_t += f"TOTAL: ${tot_ticket:,.2f}\n"
+      txt_t += f"========================================\n"
 
-      st.success(f"¡Compra #{compra_id} registrada con éxito!")
-      st.text(texto_ticket)
+      st.success(f"¡Compra #{c_id} registrada con éxito!")
+      st.text(txt_t)
 
-      # Reiniciar Carrito
       st.session_state.carrito_compras = []
 
       st.download_button(
-          label="📄 Descargar Ticket de Compra (TXT)",
-          data=texto_ticket,
-          file_name=f"Ticket_{compra_id}.txt",
+          label="📄 Descargar Ticket (.TXT)",
+          data=txt_t,
+          file_name=f"Ticket_{c_id}.txt",
           mime="text/plain",
       )
-  else:
-    st.info(
-        "El ticket está vacío. Seleccione un producto arriba y haga clic en"
-        " 'Agregar Producto'."
-    )
 
 # ---------------------------------------------------------
 # OPCIÓN 2: VER INVENTARIO Y PRECIOS
 # ---------------------------------------------------------
 elif menu == "📦 Ver Inventario y Precios":
-  st.subheader("📦 Inventario Actual y Lista de Precios")
+  st.subheader("📦 Inventario Actual")
   cursor.execute(
       "SELECT id, nombre, precio_compra, precio_venta, stock_kilos FROM"
       " materiales"
   )
-  mat_list = cursor.fetchall()
-  df_mat = pd.DataFrame(
-      mat_list,
+  mats = cursor.fetchall()
+  df_inv = pd.DataFrame(
+      mats,
       columns=[
           "ID",
           "Material",
           "Precio Compra ($)",
           "Precio Venta ($)",
-          "Stock Bodega (Kg)",
+          "Stock (Kg)",
       ],
   )
-  st.dataframe(df_mat, use_container_width=True)
+  st.dataframe(df_inv, use_container_width=True)
+
+  excel_data = convertir_df_a_excel(df_inv)
+  st.download_button(
+      label="🟢 Descargar Inventario en Excel (.xlsx)",
+      data=excel_data,
+      file_name=f"Inventario_{datetime.now().strftime('%Y%m%d')}.xlsx",
+      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  )
 
 # ---------------------------------------------------------
-# OPCIÓN 3: REGISTRAR VENTA (SALIDA DE MATERIAL)
+# OPCIÓN 3: REGISTRAR VENTA
 # ---------------------------------------------------------
 elif menu == "📤 Registrar Venta (Salida)":
-  st.subheader("📤 Registrar Venta de Material a Fundidora")
-  comprador = st.text_input("Nombre de la Fundidora / Comprador Final:")
+  st.subheader("📤 Registrar Venta de Material")
+
+  turno_v = st.selectbox(
+      "⏱️ Turno:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"]
+  )
+  comprador = st.text_input("Fundidora / Comprador Final:")
 
   cursor.execute("SELECT id, nombre, precio_venta, stock_kilos FROM materiales")
-  mats = cursor.fetchall()
+  mats_v = cursor.fetchall()
 
-  ventas_dict = {}
-  for m in mats:
+  dict_v = {}
+  for m in mats_v:
     col1, col2, col3 = st.columns(3)
     with col1:
       st.write(f"**{m[1]}** (Disp: {m[3]:.1f} kg)")
@@ -467,24 +446,24 @@ elif menu == "📤 Registrar Venta (Salida)":
     with col3:
       st.write(f"Subtotal: **${kv * m[2]:,.2f}**")
     if kv > 0:
-      ventas_dict[m[0]] = (m[1], kv, m[2], kv * m[2])
+      dict_v[m[0]] = (m[1], kv, m[2], kv * m[2])
 
   if st.button("Finalizar Venta", type="primary"):
     if not comprador:
       st.error("Ingrese el comprador.")
-    elif not ventas_dict:
+    elif not dict_v:
       st.error("Seleccione al menos un producto.")
     else:
-      f_act = datetime.now().strftime("%Y-%m-%d %H:%M")
-      tot_v = sum(x[3] for x in ventas_dict.values())
+      f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+      tot_v = sum(x[3] for x in dict_v.values())
       cursor.execute(
-          "INSERT INTO ventas (fecha, comprador, total_cobrado) VALUES (?, ?,"
-          " ?)",
-          (f_act, comprador, tot_v),
+          "INSERT INTO ventas (fecha, comprador, total_cobrado, turno) VALUES"
+          " (?, ?, ?, ?)",
+          (f_act, comprador, tot_v, turno_v),
       )
       v_id = cursor.lastrowid
 
-      for mid, data in ventas_dict.items():
+      for mid, data in dict_v.items():
         cursor.execute(
             "INSERT INTO detalle_venta (venta_id, material_id, kilos, subtotal)"
             " VALUES (?, ?, ?, ?)",
@@ -496,135 +475,292 @@ elif menu == "📤 Registrar Venta (Salida)":
         )
 
       conexion.commit()
-      st.success(f"¡Venta #{v_id} realizada por ${tot_v:,.2f}!")
+      st.success(f"¡Venta #{v_id} registrada por ${tot_v:,.2f}!")
 
 # ---------------------------------------------------------
-# OPCIÓN 4: CONTROL DE CAJA (FONDO / ENTRADAS)
+# OPCIÓN 4: CONTROL DE CAJA
 # ---------------------------------------------------------
 elif menu == "💵 Control de Caja (Fondo / Entradas)":
-  st.subheader("💵 Fondo de Caja e Inyecciones de Efectivo")
+  st.subheader("💵 Fondo e Inyecciones de Caja")
 
   with st.form("form_caja_in"):
+    turno_c = st.selectbox(
+        "Turno:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"]
+    )
     tipo_m = st.selectbox(
         "Tipo:", ["Fondo Inicial de Caja", "Inyección Extra de Efectivo"]
     )
     monto_m = st.number_input("Monto ($):", min_value=0.0, step=100.0)
     motivo_m = st.text_input("Motivo:")
+
     if st.form_submit_button("Guardar en Caja"):
       if monto_m > 0:
-        f_act = datetime.now().strftime("%Y-%m-%d %H:%M")
+        f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute(
-            "INSERT INTO movimientos_caja (fecha, tipo, monto, motivo) VALUES"
-            " (?, ?, ?, ?)",
-            (f_act, tipo_m, monto_m, motivo_m),
+            "INSERT INTO movimientos_caja (fecha, tipo, monto, motivo, turno)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (f_act, tipo_m, monto_m, motivo_m, turno_c),
         )
         conexion.commit()
-        st.success(f"Se ingresaron ${monto_m:,.2f} a caja.")
+        st.success(f"Se ingresaron ${monto_m:,.2f} a caja en [{turno_c}].")
         st.rerun()
 
   cursor.execute(
-      "SELECT id, fecha, tipo, monto, motivo FROM movimientos_caja ORDER BY id"
-      " DESC"
+      "SELECT id, fecha, turno, tipo, monto, motivo FROM movimientos_caja ORDER"
+      " BY id DESC"
   )
-  st.dataframe(
-      pd.DataFrame(
-          cursor.fetchall(),
-          columns=["ID", "Fecha", "Tipo", "Monto", "Motivo"],
-      ),
-      use_container_width=True,
+  df_caja_movs = pd.DataFrame(
+      cursor.fetchall(),
+      columns=["ID", "Fecha", "Turno", "Tipo", "Monto", "Motivo"],
   )
+  st.dataframe(df_caja_movs, use_container_width=True)
 
 # ---------------------------------------------------------
-# OPCIÓN 5: CORTE DE CAJA DIARIO
+# OPCIÓN 5: CORTE DE CAJA POR TURNO Y DÍA
 # ---------------------------------------------------------
-elif menu == "✂️ Corte de Caja Diario":
-  st.subheader("✂️ Corte de Caja Diario")
-  f_corte = st.date_input("Fecha del corte:", datetime.now())
-  f_i = f_corte.strftime("%Y-%m-%d 00:00")
-  f_f = f_corte.strftime("%Y-%m-%d 23:59")
+elif menu == "✂️ Corte de Caja por Turno y Día":
+  st.subheader("✂️ Arqueo y Corte de Caja")
+
+  col_f1, col_f2 = st.columns(2)
+  with col_f1:
+    f_corte = st.date_input("Fecha del Corte:", datetime.now())
+  with col_f2:
+    filtro_turno = st.selectbox(
+        "Filtrar por Turno:",
+        [
+            "Todos los Turnos (Día Completo)",
+            "Turno 1 (Mañana)",
+            "Turno 2 (Tarde)",
+        ],
+    )
+
+  f_i = f_corte.strftime("%Y-%m-%d 00:00:00")
+  f_f = f_corte.strftime("%Y-%m-%d 23:59:59")
+
+  # Construir condición SQL según el turno elegido
+  cond_turno = ""
+  params_t = [f_i, f_f]
+  if filtro_turno != "Todos los Turnos (Día Completo)":
+    cond_turno = " AND turno = ?"
+    params_t.append(filtro_turno)
 
   cursor.execute(
-      "SELECT SUM(monto) FROM movimientos_caja WHERE fecha BETWEEN ? AND ?",
-      (f_i, f_f),
+      f"SELECT SUM(monto) FROM movimientos_caja WHERE fecha >= ? AND fecha <="
+      f" ?{cond_turno}",
+      params_t,
   )
   tot_ingresado = cursor.fetchone()[0] or 0.0
 
   cursor.execute(
-      "SELECT SUM(total_cobrado) FROM ventas WHERE fecha BETWEEN ? AND ?",
-      (f_i, f_f),
+      f"SELECT SUM(total_cobrado) FROM ventas WHERE fecha >= ? AND fecha <="
+      f" ?{cond_turno}",
+      params_t,
   )
   tot_ventas = cursor.fetchone()[0] or 0.0
 
   cursor.execute(
-      "SELECT SUM(total_pagado) FROM compras WHERE fecha BETWEEN ? AND ?",
-      (f_i, f_f),
+      f"SELECT SUM(total_pagado) FROM compras WHERE fecha >= ? AND fecha <="
+      f" ?{cond_turno}",
+      params_t,
   )
   tot_compras = cursor.fetchone()[0] or 0.0
 
   cursor.execute(
-      "SELECT SUM(monto) FROM gastos WHERE fecha BETWEEN ? AND ?", (f_i, f_f)
+      f"SELECT SUM(monto) FROM gastos WHERE fecha >= ? AND fecha <="
+      f" ?{cond_turno}",
+      params_t,
   )
   tot_gastos = cursor.fetchone()[0] or 0.0
 
-  efectivo_en_caja = (tot_ingresado + tot_ventas) - (tot_compras + tot_gastos)
+  efectivo_restante = (tot_ingresado + tot_ventas) - (tot_compras + tot_gastos)
 
   st.markdown(
       f"""
     <div class="total-card">
-        <p style="margin:0;">EFECTIVO FÍSICO QUE DEBE HABER EN CAJA</p>
-        <h2>${efectivo_en_caja:,.2f} MXN</h2>
+        <p style="margin:0; font-weight:bold;">EFECTIVO RESTANTE EN CAJA ({filtro_turno.upper()})</p>
+        <h2>${efectivo_restante:,.2f} MXN</h2>
     </div>
     """,
       unsafe_allow_html=True,
   )
 
-  col1, col2, col3 = st.columns(3)
-  col1.metric("Ingresos a Caja", f"${tot_ingresado + tot_ventas:,.2f}")
-  col2.metric("Pagado en Compras", f"${tot_compras:,.2f}")
-  col3.metric("Gastos Operativos", f"${tot_gastos:,.2f}")
+  st.write("")
+  col1, col2, col3, col4 = st.columns(4)
+  col1.metric("Fondo/Inyecciones", f"${tot_ingresado:,.2f}")
+  col2.metric("Ventas Cobradas", f"${tot_ventas:,.2f}")
+  col3.metric("Comprado en Material", f"${tot_compras:,.2f}")
+  col4.metric("Gastos Generales", f"${tot_gastos:,.2f}")
+
+  txt_corte = f"========================================\n"
+  txt_corte += f"       CORTE DE CAJA ({f_corte})       \n"
+  txt_corte += f"       Filtro: {filtro_turno}          \n"
+  txt_corte += f"========================================\n"
+  txt_corte += f"Fondo / Inyecciones:  ${tot_ingresado:,.2f}\n"
+  txt_corte += f"Ventas del Día:       ${tot_ventas:,.2f}\n"
+  txt_corte += f"(-) Compras Material: ${tot_compras:,.2f}\n"
+  txt_corte += f"(-) Gastos Varios:    ${tot_gastos:,.2f}\n"
+  txt_corte += f"----------------------------------------\n"
+  txt_corte += f"EFECTIVO EN CAJA:     ${efectivo_restante:,.2f}\n"
+  txt_corte += f"========================================\n"
+
+  st.text(txt_corte)
+  st.download_button(
+      label="📄 Descargar Corte de Caja (.TXT)",
+      data=txt_corte,
+      file_name=f"Corte_Caja_{f_corte}_{filtro_turno}.txt",
+      mime="text/plain",
+  )
 
 # ---------------------------------------------------------
-# OPCIÓN 6: REGISTRAR Y ADMINISTRAR GASTOS
+# OPCIÓN 6: GASTOS
 # ---------------------------------------------------------
 elif menu == "💸 Registrar y Administrar Gastos":
   st.subheader("💸 Registro de Gastos")
   with st.form("fgastos"):
+    turno_g = st.selectbox(
+        "Turno:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"]
+    )
     cat = st.selectbox(
         "Categoría:",
         ["Sueldo", "Gasolina", "Mantenimiento", "Luz", "Agua", "Otros"],
     )
     mon = st.number_input("Monto ($):", min_value=0.0)
     des = st.text_input("Descripción:")
+
     if st.form_submit_button("Guardar Gasto"):
       if mon > 0:
         cursor.execute(
-            "INSERT INTO gastos (fecha, categoria, descripcion, monto) VALUES"
-            " (?, ?, ?, ?)",
-            (datetime.now().strftime("%Y-%m-%d %H:%M"), cat, des, mon),
+            "INSERT INTO gastos (fecha, categoria, descripcion, monto, turno)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                cat,
+                des,
+                mon,
+                turno_g,
+            ),
         )
         conexion.commit()
         st.success("Gasto registrado.")
         st.rerun()
 
+  cursor.execute(
+      "SELECT id, fecha, turno, categoria, descripcion, monto FROM gastos ORDER"
+      " BY id DESC"
+  )
+  df_g = pd.DataFrame(
+      cursor.fetchall(),
+      columns=["ID", "Fecha", "Turno", "Categoría", "Descripción", "Monto"],
+  )
+  st.dataframe(df_g, use_container_width=True)
+
 # ---------------------------------------------------------
-# OPCIÓN 7: REPORTES
+# OPCIÓN 7: REPORTES (DIARIO, SEMANAL, MENSUAL, ANUAL)
 # ---------------------------------------------------------
-elif menu == "📊 Reportes de Compras y Utilidad":
-  st.subheader("📊 Reportes Financieros")
-  cursor.execute("SELECT SUM(total_pagado) FROM compras")
-  tc = cursor.fetchone()[0] or 0.0
-  cursor.execute("SELECT SUM(monto) FROM gastos")
-  tg = cursor.fetchone()[0] or 0.0
-  st.metric("Total Invertido en Compras", f"${tc:,.2f}")
-  st.metric("Total Gastos acumulados", f"${tg:,.2f}")
+elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
+  st.subheader("📊 Reportes Financieros y de Utilidad Neta")
+
+  periodo = st.radio(
+      "Seleccione el período de consulta:",
+      ["Diario (Hoy)", "Semanal", "Mensual", "Anual", "Personalizado"],
+      horizontal=True,
+  )
+
+  ahora = datetime.now()
+
+  if periodo == "Diario (Hoy)":
+    f_inicio = ahora.strftime("%Y-%m-%d 00:00:00")
+    f_fin = ahora.strftime("%Y-%m-%d 23:59:59")
+  elif periodo == "Semanal":
+    f_inicio = (ahora - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00")
+    f_fin = ahora.strftime("%Y-%m-%d 23:59:59")
+  elif periodo == "Mensual":
+    f_inicio = ahora.strftime("%Y-%m-01 00:00:00")
+    f_fin = ahora.strftime("%Y-%m-%d 23:59:59")
+  elif periodo == "Anual":
+    f_inicio = ahora.strftime("%Y-01-01 00:00:00")
+    f_fin = ahora.strftime("%Y-12-31 23:59:59")
+  else:
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+      d_i = st.date_input("Fecha Inicio:", ahora - timedelta(days=30))
+    with col_p2:
+      d_f = st.date_input("Fecha Fin:", ahora)
+    f_inicio = d_i.strftime("%Y-%m-%d 00:00:00")
+    f_fin = d_f.strftime("%Y-%m-%d 23:59:59")
+
+  cursor.execute(
+      "SELECT COUNT(*), SUM(total_pagado) FROM compras WHERE fecha >= ? AND"
+      " fecha <= ?",
+      (f_inicio, f_fin),
+  )
+  res_c = cursor.fetchone()
+  num_compras = res_c[0] or 0
+  tot_compra_dinero = res_c[1] or 0.0
+
+  cursor.execute(
+      "SELECT SUM(monto) FROM gastos WHERE fecha >= ? AND fecha <= ?",
+      (f_inicio, f_fin),
+  )
+  tot_gastos_per = cursor.fetchone()[0] or 0.0
+
+  cursor.execute(
+      """
+        SELECT m.nombre, SUM(d.kilos), SUM(d.subtotal), 
+               SUM((m.precio_venta - m.precio_compra) * d.kilos) as utilidad
+        FROM detalle_compra d
+        JOIN compras c ON d.compra_id = c.id
+        JOIN materiales m ON d.material_id = m.id
+        WHERE c.fecha >= ? AND c.fecha <= ?
+        GROUP BY m.nombre
+    """,
+      (f_inicio, f_fin),
+  )
+  mats_rep = cursor.fetchall()
+
+  util_bruta_per = sum(r[3] for r in mats_rep) if mats_rep else 0.0
+  util_neta_per = util_bruta_per - tot_gastos_per
+
+  st.write("---")
+  col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
+  col_r1.metric("Tickets Compra", num_compras)
+  col_r2.metric("Inversión en Material", f"${tot_compra_dinero:,.2f}")
+  col_r3.metric("Utilidad Bruta Est.", f"${util_bruta_per:,.2f}")
+  col_r4.metric("Gastos Totales", f"${tot_gastos_per:,.2f}")
+  col_r5.metric("Utilidad Neta Real", f"${util_neta_per:,.2f}")
+
+  st.write("---")
+  st.write(f"### Desglose de Compras ({periodo})")
+  if mats_rep:
+    df_rep = pd.DataFrame(
+        mats_rep,
+        columns=[
+            "Material",
+            "Kilos Comprados",
+            "Inversión ($)",
+            "Utilidad Est. ($)",
+        ],
+    )
+    st.dataframe(df_rep, use_container_width=True)
+
+    excel_rep = convertir_df_a_excel(df_rep)
+    st.download_button(
+        label=f"🟢 Descargar Reporte ({periodo}) en Excel (.xlsx)",
+        data=excel_rep,
+        file_name=f"Reporte_{periodo}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mime=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+    )
+  else:
+    st.info("No hay registros de compras en el período seleccionado.")
 
 # ---------------------------------------------------------
 # OPCIÓN 8: CONFIGURACIÓN Y DATOS DE LA EMPRESA
 # ---------------------------------------------------------
 elif menu == "⚙️ Configuración / Datos Empresa":
-  st.subheader("⚙️ Configuración de Empresa y Materiales")
+  st.subheader("⚙️ Configuración")
 
-  st.write("### 🏢 Datos de la Chatarrería")
   with st.form("form_config_emp"):
     nom_e = st.text_input("Nombre del Negocio:", value=emp_nombre)
     dir_e = st.text_input("Dirección:", value=emp_direccion)
@@ -640,14 +776,11 @@ elif menu == "⚙️ Configuración / Datos Empresa":
       st.rerun()
 
   st.markdown("---")
-  st.write("### 🗑️ Eliminar o Modificar Materiales")
-  cursor.execute("SELECT id, nombre, precio_compra, precio_venta FROM materiales")
+  st.write("### 🗑️ Eliminar Materiales")
+  cursor.execute("SELECT id, nombre FROM materiales")
   mats_all = cursor.fetchall()
-
   if mats_all:
-    mat_del = st.selectbox(
-        "Material a eliminar:", [m[1] for m in mats_all], key="del_mat_sel"
-    )
+    mat_del = st.selectbox("Material:", [m[1] for m in mats_all])
     if st.button("🗑️ Borrar Material"):
       cursor.execute("DELETE FROM materiales WHERE nombre = ?", (mat_del,))
       conexion.commit()
