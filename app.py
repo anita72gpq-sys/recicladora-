@@ -221,9 +221,8 @@ menu = st.sidebar.selectbox(
 )
 
 
-# FUNCIONES DE PDF Y ARCHIVOS LOCALES
+# FUNCIONES DE CARPETA Y PDF
 def obtener_ruta_carpeta_tickets():
-  # Crear carpeta local "Tickets_Recicladora" en el equipo/servidor
   carpeta = os.path.expanduser("~/Tickets_Recicladora")
   os.makedirs(carpeta, exist_ok=True)
   return carpeta
@@ -461,7 +460,6 @@ if menu == "📝 Registrar Compra (Báscula)":
 
       conexion.commit()
 
-      # Generar y guardar PDF en carpeta Tickets_Recicladora
       bytes_pdf = generar_pdf_ticket(
           emp_nombre,
           emp_direccion,
@@ -484,8 +482,6 @@ if menu == "📝 Registrar Compra (Báscula)":
       st.success(
           f"¡Compra #{c_id} registrada y guardada en 'Tickets_Recicladora'!"
       )
-
-      carrito_guardado = st.session_state.carrito_compras.copy()
       st.session_state.carrito_compras = []
 
       if bytes_pdf:
@@ -924,8 +920,3 @@ elif menu == "⚙️ Configuración / Datos Empresa":
       st.rerun()
 
 conexion.close()
-```eof
-
-He actualizado el código de tu archivo `app.py` para que:
-1. **Excluya Excel y deje únicamente PDF** para todos los reportes, tickets y cortes de caja.
-2. **Cree y guarde automáticamente todos los archivos PDF** dentro de una carpeta llamada **`Tickets_Recicladora`** en el almacenamiento de tu dispositivo o servidor.
