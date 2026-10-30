@@ -837,7 +837,7 @@ elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
 # ---------------------------------------------------------
 elif menu == "⚙️ Configuración / Precios / Empresa":
     st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
-    st.subheader("⚙️ Configuración General, Precios de Compra y Datos de Empresa")
+    st.subheader("⚙️ Configuración General y Datos de Empresa")
     
     with st.form("form_config_emp"):
         nom_e = st.text_input("Nombre del Negocio:", value=emp_nombre)
@@ -850,26 +850,54 @@ elif menu == "⚙️ Configuración / Precios / Empresa":
             st.rerun()
 
     st.markdown("---")
-    st.write("### 💰 Configuración Oficial de Precios de Compra por Material")
+    st.subheader("💰 Configuración de Precios de Compra y Venta por Material")
+    st.write("Aquí puedes actualizar directamente los precios oficiales de compra y venta para cada material:")
     
-    cursor.execute("SELECT id, nombre, precio_compra FROM materiales ORDER BY nombre ASC")
-    todos_mats = cursor.fetchall()
+    cursor.execute("SELECT id, nombre, precio_compra, precio_venta FROM materiales ORDER BY nama ASC" if False else "SELECT id, nombre, precio_compra, precio_venta FROM materiales ORDER BY nombre ASC")
+    todos_mats_precios = cursor.fetchall()
     
-    if todos_mats:
-        with st.form("form_actualizar_precios"):
-            nuevos_precios = {}
-            for m_id, m_nom, m_pc in todos_mats:
-                nuevos_precios[m_id] = st.number_input(f"Precio Oficial de Compra para '{m_nom}' ($/Kg):", value=float(m_pc), step=0.5, format="%.2f", key=f"precio_mat_{m_id}")
+    if todos_mats_precios:
+        with st.form("form_actualizar_precios_completos"):
+            nuevos_datos_precios = {}
+            for m_id, m_nom, m_pc, m_pv in todos_mats_precios:
+                st.markdown(f"**📦 {m_nom}**")
+                col_p1, col_p2 = st.columns(2)
+                with col_p1:
+                    nuevo_pc = st.number_input(f"Precio Compra ($/Kg) - {m_nom}", value=float(m_pc), step=0.5, format="%.2f", key=f"pc_{m_id}")
+                with col_p2:
+                    nuevo_pv = st.number_input(f"Precio Venta ($/Kg) - {m_nom}", value=float(m_pv), step=0.5, format="%.2f", key=f"pv_{m_id}")
+                nuevos_datos_precios[m_id] = (nuevo_pc, nuevo_pv)
+                st.markdown("---")
                 
-            if st.form_submit_button("💾 Guardar Precios en el Inventario"):
-                for m_id, nuevo_val in nuevos_precios.items():
-                    cursor.execute("UPDATE materiales SET precio_compra = ? WHERE id = ?", (nuevo_val, m_id))
+            if st.form_submit_button("💾 Guardar Precios de Compra y Venta"):
+                for m_id, (pc_val, pv_val) in nuevos_datos_precios.items():
+                    cursor.execute("UPDATE materiales SET precio_compra = ?, precio_venta = ? WHERE id = ?", (pc_val, pv_val, m_id))
                 conexion.commit()
-                st.success("¡Precios de compra actualizados correctamente en el inventario general!")
+                st.success("¡Precios de compra y venta actualizados correctamente en el inventario general!")
                 st.rerun()
 
     st.markdown("---")
-    st.write("### ⚠️ Reiniciar Datos de Prueba")
+    st.subheader("➕ Agregar Nuevo Material al Inventario")
+    with st.form("form_nuevo_material"):
+        nuevo_nom_mat = st.text_input("Nombre del Nuevo Material:")
+        nuevo_pc_mat = st.number_input("Precio de Compra Inicial ($/Kg):", min_value=0.0, step=0.5, format="%.2f")
+        nuevo_pv_mat = st.number_input("Precio de Venta Inicial ($/Kg):", min_value=0.0, step=0.5, format="%.2f")
+        
+        if st.form_submit_button("➕ Registrar Material"):
+            if nuevo_nom_mat:
+                try:
+                    cursor.execute("INSERT INTO materiales (nombre, precio_compra, precio_venta, stock_kilos) VALUES (?, ?, ?, 0.0)", 
+                                   (nuevo_nom_mat, nuevo_pc_mat, nuevo_pv_mat))
+                    conexion.commit()
+                    st.success(f"¡Material '{nuevo_nom_mat}' agregado con éxito!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al registrar: {e}")
+            else:
+                st.warning("Escriba el nombre del material.")
+
+    st.markdown("---")
+    st.subheader("⚠️ Reiniciar Datos de Prueba")
     st.warning("Esto borrará todos los registros de compras, ventas, gastos, movimientos de caja y restablecerá el stock a 0 para que puedas empezar de cero con tus operaciones reales.")
     if st.button("🗑️ Borrar Todas las Pruebas y Vaciar Base de Datos"):
         cursor.execute("DELETE FROM compras")
@@ -884,14 +912,9 @@ elif menu == "⚙️ Configuración / Precios / Empresa":
         st.rerun()
 
     st.markdown("---")
-    st.write("### 🗑️ Eliminar Materiales")
-    if todos_mats:
-        mat_del = st.selectbox("Seleccione material a eliminar:", [m[1] for m in todos_mats])
+    st.subheader("🗑️ Eliminar Materiales")
+    if todos_mats_precios:
+        mat_del = st.selectbox("Seleccione material a eliminar:", [m[1] for m in todos_mats_precios])
         if st.button("🗑️ Borrar Material Permanentemente"):
             cursor.execute("DELETE FROM materiales WHERE nombre = ?", (mat_del,))
-            conexion.commit()
-            st.error(f"Material '{mat_del}' eliminado.")
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-conexion.close()
+            conexion.
