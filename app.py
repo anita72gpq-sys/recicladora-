@@ -853,7 +853,7 @@ elif menu == "⚙️ Configuración / Precios / Empresa":
     st.subheader("💰 Configuración de Precios de Compra y Venta por Material")
     st.write("Aquí puedes actualizar directamente los precios oficiales de compra y venta para cada material:")
     
-    cursor.execute("SELECT id, nombre, precio_compra, precio_venta FROM materiales ORDER BY nama ASC" if False else "SELECT id, nombre, precio_compra, precio_venta FROM materiales ORDER BY nombre ASC")
+    cursor.execute("SELECT id, nombre, precio_compra, precio_venta FROM materiales ORDER BY nombre ASC")
     todos_mats_precios = cursor.fetchall()
     
     if todos_mats_precios:
@@ -917,4 +917,9 @@ elif menu == "⚙️ Configuración / Precios / Empresa":
         mat_del = st.selectbox("Seleccione material a eliminar:", [m[1] for m in todos_mats_precios])
         if st.button("🗑️ Borrar Material Permanentemente"):
             cursor.execute("DELETE FROM materiales WHERE nombre = ?", (mat_del,))
-            conexion.
+            conexion.commit()
+            st.error(f"Material '{mat_del}' eliminado.")
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+conexion.close()
