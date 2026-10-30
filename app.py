@@ -15,7 +15,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # ---------------------------------------------------------
-# CONFIGURACIÓN DE PÁGINA Y TEMA VISUAL (ESTILO ESCRITORIO VERDE)
+# CONFIGURACIÓN DE PÁGINA Y TEMA VISUAL (ESTILO VENTANA PRINCIPAL)
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Chatarrería Don Kilo - ERP",
@@ -26,25 +26,34 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .stApp { background-color: #F4F8F5; }
+    .stApp { background-color: #E8F0EC; }
     
-    /* Marcos visuales claros tipo escritorio clásico */
-    .win-frame {
-        border: 2px solid #2E7D32;
+    /* Contenedor Principal en forma de Cuadro / Ventana */
+    .main-window-box {
         background-color: #FFFFFF;
-        padding: 18px;
+        border: 2px solid #2E7D32;
+        border-radius: 12px;
+        padding: 25px;
+        box-shadow: 0px 6px 15px rgba(46, 125, 50, 0.15);
+        margin-bottom: 20px;
+    }
+
+    /* Sub-marcos internos para cada sección */
+    .win-frame {
+        border: 1px solid #C8E6C9;
+        background-color: #F9FBF9;
+        padding: 15px;
         border-radius: 8px;
         margin-bottom: 15px;
-        box-shadow: 0px 2px 5px rgba(46, 125, 50, 0.1);
     }
     .win-frame-title {
         font-weight: bold;
         color: #1B5E20;
         font-size: 14px;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        border-bottom: 1px solid #C8E6C9;
+        border-bottom: 2px solid #A5D6A7;
         padding-bottom: 5px;
     }
 
@@ -305,9 +314,12 @@ def generar_pdf_ticket(nombre_emp, dir_emp, tel_emp, folio, fecha, turno, client
     return buffer.getvalue()
 
 # ---------------------------------------------------------
-# OPCIÓN 1: BÁSCULA DE COMPRA (ESTILO VISUAL VERDE)
+# OPCIÓN 1: BÁSCULA DE COMPRA (DENTRO DE CUADRO PRINCIPAL)
 # ---------------------------------------------------------
 if menu == "📝 Registro de Compra (Báscula)":
+    
+    # Abrir el cuadro contenedor principal
+    st.markdown('<div class="main-window-box">', unsafe_allow_html=True)
     
     col_head1, col_head2 = st.columns([3, 1])
     with col_head1:
@@ -497,6 +509,9 @@ if menu == "📝 Registro de Compra (Báscula)":
         """, unsafe_allow_html=True)
         st.code(st.session_state.texto_ticket_pantalla, language="")
         mostrar_boton_imprimir_termico(st.session_state.texto_ticket_pantalla)
+
+    # Cerrar el cuadro contenedor principal
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # OPCIÓN 2: VER INVENTARIO Y PRECIOS
