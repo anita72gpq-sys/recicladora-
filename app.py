@@ -28,7 +28,6 @@ st.markdown("""
     <style>
     .stApp { background-color: #EFEFEF; }
     
-    /* Estilo de marcos tipo Windows Forms */
     .win-frame {
         border: 2px dashed #999999;
         background-color: #F8F8F8;
@@ -54,7 +53,6 @@ st.markdown("""
     .header-box h1 { color: #FFFFFF !important; margin: 0; font-size: 24px; font-weight: bold; }
     .header-box p { color: #ECF0F1 !important; margin: 5px 0 0 0; font-size: 13px; }
 
-    /* Botones con estilo clásico de escritorio */
     div.stButton > button:first-child {
         background-color: #E1E1E1 !important; 
         color: #000000 !important;
@@ -186,6 +184,12 @@ inicializar_bd()
 if "carrito_compras" not in st.session_state:
     st.session_state.carrito_compras = []
 
+if "texto_ticket_pantalla" not in st.session_state:
+    st.session_state.texto_ticket_pantalla = ""
+
+if "ultimo_pdf_compra" not in st.session_state:
+    st.session_state.ultimo_pdf_compra = None
+
 conexion = obtener_conexion()
 cursor = conexion.cursor()
 
@@ -293,73 +297,34 @@ def generar_pdf_ticket(nombre_emp, dir_emp, tel_emp, folio, fecha, turno, client
     buffer.seek(0)
     return buffer.getvalue()
 
-def generar_pdf_corte_caja(nombre_emp, dir_emp, tel_emp, fecha_str, turno_str, efectivo, ingresos, ventas, compras, gastos):
-    if not PDF_DISPONIBLE:
-        return None
-    from io import BytesIO
-    buffer = BytesIO()
-    p = canvas.Canvas(buffer, pagesize=letter)
-    p.setFont("Helvetica-Bold", 16)
-    p.drawString(50, 750, f"♻️ {nombre_emp}")
-    p.setFont("Helvetica", 10)
-    p.drawString(50, 735, f"{dir_emp} | Tel: {tel_emp}")
-    p.line(50, 725, 550, 725)
-    
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(50, 695, f"CORTE DE CAJA - {fecha_str}")
-    p.setFont("Helvetica", 11)
-    p.drawString(50, 675, f"Filtro Turno: {turno_str}")
-    
-    p.drawString(50, 640, f"Fondo e Inyecciones a Caja: ${ingresos:,.2f} MXN")
-    p.drawString(50, 620, f"Ventas Realizadas:           ${ventas:,.2f} MXN")
-    p.drawString(50, 600, f"(-) Compras en Material:     ${compras:,.2f} MXN")
-    p.drawString(50, 580, f"(-) Gastos Operativos:        ${gastos:,.2f} MXN")
-    
-    p.line(50, 565, 550, 565)
-    p.setFont("Helvetica-Bold", 14)
-    p.drawString(50, 540, f"EFECTIVO RESTANTE EN CAJA: ${efectivo:,.2f} MXN")
-    p.line(50, 525, 550, 525)
-    
-    p.showPage()
-    p.save()
-    buffer.seek(0)
-    return buffer.getvalue()
-
 # ---------------------------------------------------------
 # OPCIÓN 1: BÁSCULA DE COMPRA (ESTILO ESCRITORIO)
 # ---------------------------------------------------------
 if menu == "📝 Registro de Compra (Báscula)":
-    st.markdown("### 📝 REGISTRO DE COMPRA (BÁSCULA)")
     
-    # Marco 1: Datos Personales / Proveedor
+    # Botón para iniciar nueva compra de inmediato
+    col_head1, col_head2 = st.columns([3, 1])
+    with col_head1:
+        st.markdown("### 📝 REGISTRO DE COMPRA (BÁSCULA)")
+    with col_head2:
+        if st.button("🔄 Nueva Compra", use_container_width=True):
+            st.session_state.carrito_compras = []
+            st.session_state.texto_ticket_pantalla = ""
+            st.session_state.ultimo_pdf_compra = None
+            if "atj_mat" in st.session_state:
+                del st.session_state.atj_mat
+            st.rerun()
+
+    # Marco 1: Datos Personales / Proveedor (Campo libre directo)
     st.markdown('<div class="win-frame">', unsafe_allow_html=True)
     st.markdown('<div class="win-frame-title">Datos Personales / Proveedor</div>', unsafe_allow_html=True)
     
     col_t1, col_t2 = st.columns([2, 2])
     with col_t1:
         turno_actual = st.selectbox("Turno Operativo:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
-        
-    cursor.execute("SELECT nombre FROM clientes ORDER BY nombre ASC")
-    lista_clientes = [c[0] for c in cursor.fetchall()]
-    if "Público General" not in lista_clientes:
-        lista_clientes.insert(0, "Público General")
-        
-    col_cli1, col_cli2 = st.columns([3, 1])
-    with col_cli1:
-        cliente_sel = st.selectbox("Cliente / Proveedor:", lista_clientes)
-    with col_cli2:
-        with st.popover("➕ Nuevo"):
-            cli_nom = st.text_input("Nombre:")
-            cli_tel = st.text_input("Teléfono:")
-            if st.button("Guardar Proveedor"):
-                if cli_nom:
-                    try:
-                        cursor.execute("INSERT INTO clientes (nombre, telefono) VALUES (?, ?)", (cli_nom, cli_tel))
-                        conexion.commit()
-                        st.success("¡Registrado!")
-                        st.rerun()
-                    except Exception:
-                        st.error("Ya existe.")
+    with col_t2:
+        # Campo de texto libre para ingresar o escribir el cliente directamente
+        cliente_sel = st.text_input("Cliente / Proveedor (Escribir nombre):", value="Público General")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # Marco 2: Atajos rápidos de selección
@@ -420,8 +385,7 @@ if menu == "📝 Registro de Compra (Báscula)":
                 st.success(f"Agregado {kilos} kg de {mat_nom}")
                 st.rerun()
     with col_b2:
-        if st.button("🔄 Limpiar"):
-            st.session_state.carrito_compras = []
+        if st.button("🔄 Limpiar Partida"):
             if "atj_mat" in st.session_state:
                 del st.session_state.atj_mat
             st.rerun()
@@ -448,6 +412,14 @@ if menu == "📝 Registro de Compra (Báscula)":
         st.write("")
         if st.button("💾 REGISTRAR E IMPRIMIR TICKET", type="primary", use_container_width=True):
             f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Registrar cliente automáticamente en la tabla si se escribió uno nuevo
+            if cliente_sel and cliente_sel != "Público General":
+                try:
+                    cursor.execute("INSERT OR IGNORE INTO clientes (nombre, tipo) VALUES (?, 'Proveedor')", (cliente_sel,))
+                except Exception:
+                    pass
+
             cursor.execute("INSERT INTO compras (fecha, cliente, total_pagado, turno) VALUES (?, ?, ?, ?)",
                            (f_act, cliente_sel, tot_ticket, turno_actual))
             c_id = cursor.lastrowid
