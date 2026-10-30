@@ -1,8 +1,17 @@
 from datetime import datetime, timedelta
-import io
-import os
+from io import BytesIO
 import sqlite3
 import pandas as pd
+
+# Intentar importar reportlab para generar PDFs profesionales
+try:
+  from reportlab.lib.pagesizes import letter
+  from reportlab.pdfgen import canvas
+
+  PDF_DISPONIBLE = True
+except ImportError:
+  PDF_DISPONIBLE = False
+
 import streamlit as st
 
 # ---------------------------------------------------------
@@ -212,12 +221,62 @@ menu = st.sidebar.selectbox(
 )
 
 
-# EXPORTAR A EXCEL
+# FUNCIONES DE EXPORTACIÓN (EXCEL Y PDF)
 def convertir_df_a_excel(df):
-  output = io.BytesIO()
+  output = BytesIO()
   with pd.ExcelWriter(output, engine="openpyxl") as writer:
     df.to_excel(writer, index=False, sheet_name="Reporte")
   return output.getvalue()
+
+
+def generar_pdf_corte_caja(
+    nombre_emp,
+    dir_emp,
+    tel_emp,
+    fecha_str,
+    turno_str,
+    efectivo,
+    ingresos,
+    ventas,
+    compras,
+    gastos,
+):
+  if not PDF_DISPONIBLE:
+    return None
+
+  buffer = BytesIO()
+  p = canvas.Canvas(buffer, pagesize=letter)
+
+  p.setFont("Helvetica-Bold", 16)
+  p.drawString(50, 750, f"♻️ {nombre_emp}")
+  p.setFont("Helvetica", 10)
+  p.drawString(50, 735, f"{dir_emp} | Tel: {tel_emp}")
+  p.line(50, 725, 550, 725)
+
+  p.setFont("Helvetica-Bold", 14)
+  p.drawString(50, 695, f"CORTE DE CAJA - {fecha_str}")
+  p.setFont("Helvetica", 11)
+  p.drawString(50, 675, f"Filtro Turno: {turno_str}")
+
+  p.drawString(50, 640, f"Fondo e Inyecciones a Caja: ${ingresos:,.2f} MXN")
+  p.drawString(50, 620, f"Ventas Realizadas:           ${ventas:,.2f} MXN")
+  p.drawString(50, 600, f"(-) Compras en Material:     ${compras:,.2f} MXN")
+  p.drawString(50, 580, f"(-) Gastos Operativos:        ${gastos:,.2f} MXN")
+
+  p.line(50, 565, 550, 565)
+  p.setFont("Helvetica-Bold", 14)
+  p.drawString(50, 540, f"EFECTIVO RESTANTE EN CAJA: ${efectivo:,.2f} MXN")
+  p.line(50, 525, 550, 525)
+
+  p.setFont("Helvetica-Oblique", 9)
+  p.drawString(
+      50, 480, "Reporte generado automáticamente por el Sistema ERP Don Kilo."
+  )
+
+  p.showPage()
+  p.save()
+  buffer.seek(0)
+  return buffer.getvalue()
 
 
 # ---------------------------------------------------------
@@ -537,7 +596,6 @@ elif menu == "✂️ Corte de Caja por Turno y Día":
   f_i = f_corte.strftime("%Y-%m-%d 00:00:00")
   f_f = f_corte.strftime("%Y-%m-%d 23:59:59")
 
-  # Construir condición SQL según el turno elegido
   cond_turno = ""
   params_t = [f_i, f_f]
   if filtro_turno != "Todos los Turnos (Día Completo)":
@@ -603,13 +661,36 @@ elif menu == "✂️ Corte de Caja por Turno y Día":
   txt_corte += f"EFECTIVO EN CAJA:     ${efectivo_restante:,.2f}\n"
   txt_corte += f"========================================\n"
 
-  st.text(txt_corte)
-  st.download_button(
-      label="📄 Descargar Corte de Caja (.TXT)",
-      data=txt_corte,
-      file_name=f"Corte_Caja_{f_corte}_{filtro_turno}.txt",
-      mime="text/plain",
-  )
+  col_d1, col_d2 = st.columns(2)
+  with col_d1:
+    st.download_button(
+        label="📄 Descargar Corte (.TXT)",
+        data=txt_corte,
+        file_name=f"Corte_{f_corte}_{filtro_turno}.txt",
+        mime="text/plain",
+    )
+
+  with col_d2:
+    if PDF_DISPONIBLE:
+      bytes_pdf = generar_pdf_corte_caja(
+          emp_nombre,
+          emp_direccion,
+          emp_telefono,
+          str(f_corte),
+          filtro_turno,
+          efectivo_restante,
+          tot_ingresado,
+          tot_ventas,
+          tot_compras,
+          tot_gastos,
+      )
+      if bytes_pdf:
+        st.download_button(
+            label="🔴 Descargar Corte en PDF (.PDF)",
+            data=bytes_pdf,
+            file_name=f"Corte_{f_corte}_{filtro_turno}.pdf",
+            mime="application/pdf",
+        )
 
 # ---------------------------------------------------------
 # OPCIÓN 6: GASTOS
