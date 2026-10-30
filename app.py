@@ -385,5 +385,4 @@ if menu == "📝 Registrar Compra (Báscula)":
             bytes_pdf = generar_pdf_ticket(emp_nombre, emp_direccion, emp_telefono, c_id, f_act, turno_actual, cliente_sel, st.session_state.carrito_compras, tot_ticket)
             
             if bytes_pdf:
-                carpeta_tk = obtener_ruta_carpeta_tickets()
-                nombre_archivo = os.path.join(carpeta_tk, f"Ticket_Compra
+                carpeta_tk = obtener
