@@ -190,7 +190,7 @@ menu = st.sidebar.selectbox("📋 Menú Principal", [
     "✂️ Corte de Caja por Turno y Día",
     "💸 Registrar y Administrar Gastos",
     "📊 Reportes (Diario, Semanal, Mensual, Anual)",
-    "⚙️ Configuración / Datos Empresa"
+    "⚙️ Configuración / Precios / Empresa"
 ])
 
 def obtener_ruta_carpeta_tickets():
@@ -298,7 +298,7 @@ def generar_pdf_corte_caja(nombre_emp, dir_emp, tel_emp, fecha_str, turno_str, e
 # OPCIÓN 1: BÁSCULA DE COMPRA
 # ---------------------------------------------------------
 if menu == "📝 Registrar Compra (Báscula)":
-    st.subheader("🛒 Registro Rápido de Compra con Atajos")
+    st.subheader("🛒 Registro Rápido de Compra con Atajos y Cambio de Precio")
     
     col_t1, col_t2 = st.columns([2, 2])
     with col_t1:
@@ -355,7 +355,8 @@ if menu == "📝 Registrar Compra (Báscula)":
     with col_m2:
         kilos = st.number_input("Kilos (Kg):", min_value=0.0, step=0.5, format="%.2f")
     with col_m3:
-        precio = st.number_input("Precio $/Kg (Editable):", value=float(precio_inicial_sugerido), step=0.5, format="%.2f")
+        # Permite cambiar el precio en pantalla y actualizarlo también de inmediato en el inventario
+        precio = st.number_input("Precio $/Kg (Modificable):", value=float(precio_inicial_sugerido), step=0.5, format="%.2f")
         
     subtotal = kilos * precio
     st.info(f"Subtotal calculado: **${subtotal:,.2f} MXN**")
@@ -366,6 +367,10 @@ if menu == "📝 Registrar Compra (Báscula)":
             if kilos <= 0:
                 st.warning("Ingrese una cantidad de kilos mayor a 0.")
             else:
+                # Actualiza automáticamente el precio en el inventario si el usuario lo modificó en pantalla
+                cursor.execute("UPDATE materiales SET precio_compra = ? WHERE id = ?", (precio, mat_id))
+                conexion.commit()
+
                 st.session_state.carrito_compras.append({
                     "material_id": mat_id,
                     "material": mat_nom,
@@ -375,7 +380,7 @@ if menu == "📝 Registrar Compra (Báscula)":
                 })
                 if "atj_mat" in st.session_state:
                     del st.session_state.atj_mat
-                st.success(f"Agregado {kilos} kg de {mat_nom} a ${precio}/kg")
+                st.success(f"Agregado {kilos} kg de {mat_nom} a ${precio}/kg (Precio actualizado en inventario)")
                 st.rerun()
     with col_b2:
         if st.button("🔄 Limpiar Ticket"):
@@ -625,116 +630,4 @@ elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
         f_inicio = d_i.strftime("%Y-%m-%d 00:00:00")
         f_fin = d_f.strftime("%Y-%m-%d 23:59:59")
         
-    cursor.execute("SELECT COUNT(*), SUM(total_pagado) FROM compras WHERE fecha >= ? AND fecha <= ?", (f_inicio, f_fin))
-    res_c = cursor.fetchone()
-    num_compras = res_c[0] or 0
-    tot_compra_dinero = res_c[1] or 0.0
-    
-    cursor.execute("SELECT SUM(monto) FROM gastos WHERE fecha >= ? AND fecha <= ?", (f_inicio, f_fin))
-    tot_gastos_per = cursor.fetchone()[0] or 0.0
-    
-    cursor.execute('''
-        SELECT m.nombre, SUM(d.kilos), SUM(d.subtotal), 
-               SUM((m.precio_venta - m.precio_compra) * d.kilos) as utilidad
-        FROM detalle_compra d
-        JOIN compras c ON d.compra_id = c.id
-        JOIN materiales m ON d.material_id = m.id
-        WHERE c.fecha >= ? AND c.fecha <= ?
-        GROUP BY m.nombre
-    ''', (f_inicio, f_fin))
-    mats_rep = cursor.fetchall()
-    
-    util_bruta_per = sum(r[3] for r in mats_rep) if mats_rep else 0.0
-    util_neta_per = util_bruta_per - tot_gastos_per
-    
-    st.write("---")
-    col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
-    col_r1.metric("Tickets Compra", num_compras)
-    col_r2.metric("Inversión en Material", f"${tot_compra_dinero:,.2f}")
-    col_r3.metric("Utilidad Bruta Est.", f"${util_bruta_per:,.2f}")
-    col_r4.metric("Gastos Totales", f"${tot_gastos_per:,.2f}")
-    col_r5.metric("Utilidad Neta Real", f"${util_neta_per:,.2f}")
-    
-    st.write("---")
-    st.write(f"### Desglose de Compras ({periodo})")
-    if mats_rep:
-        df_rep = pd.DataFrame(mats_rep, columns=["Material", "Kilos Comprados", "Inversión ($)", "Utilidad Est. ($)"])
-        st.dataframe(df_rep, use_container_width=True)
-        
-        if PDF_DISPONIBLE:
-            from io import BytesIO
-            buffer_rep = BytesIO()
-            p_rep = canvas.Canvas(buffer_rep, pagesize=letter)
-            p_rep.setFont("Helvetica-Bold", 14)
-            p_rep.drawString(50, 750, f"♻️ {emp_nombre}")
-            p_rep.setFont("Helvetica", 10)
-            p_rep.drawString(50, 735, f"REPORTE FINANCIERO - PERÍODO: {periodo.upper()}")
-            p_rep.line(50, 725, 550, 725)
-            
-            p_rep.setFont("Helvetica", 10)
-            p_rep.drawString(50, 690, f"Total Inversión Compras: ${tot_compra_dinero:,.2f}")
-            p_rep.drawString(50, 670, f"Utilidad Bruta Est.:     ${util_bruta_per:,.2f}")
-            p_rep.drawString(50, 650, f"Gastos Totales:          ${tot_gastos_per:,.2f}")
-            p_rep.setFont("Helvetica-Bold", 11)
-            p_rep.drawString(50, 620, f"UTILIDAD NETA REAL:      ${util_neta_per:,.2f}")
-            
-            p_rep.showPage()
-            p_rep.save()
-            buffer_rep.seek(0)
-            bytes_pdf_rep = buffer_rep.getvalue()
-            
-            carpeta_tk = obtener_ruta_carpeta_tickets()
-            nombre_archivo_rep = os.path.join(carpeta_tk, f"Reporte_{periodo}_{datetime.now().strftime('%Y%m%d')}.pdf")
-            with open(nombre_archivo_rep, "wb") as f_pdf:
-                f_pdf.write(bytes_pdf_rep)
-                
-            mostrar_visor_pdf(bytes_pdf_rep, f"DESCARGAR / IMPRIMIR REPORTE ({periodo.upper()})")
-    else:
-        st.info("No hay registros de compras en el período seleccionado.")
-
-# ---------------------------------------------------------
-# OPCIÓN 8: CONFIGURACIÓN Y ACTUALIZACIÓN DE PRECIOS
-# ---------------------------------------------------------
-elif menu == "⚙️ Configuración / Datos Empresa":
-    st.subheader("⚙️ Configuración General y Actualización de Precios de Compra")
-    
-    with st.form("form_config_emp"):
-        nom_e = st.text_input("Nombre del Negocio:", value=emp_nombre)
-        dir_e = st.text_input("Dirección:", value=emp_direccion)
-        tel_e = st.text_input("Teléfono / Celular:", value=emp_telefono)
-        if st.form_submit_button("Guardar Datos de Empresa"):
-            cursor.execute("UPDATE config_empresa SET nombre = ?, direccion = ?, telefono = ? WHERE id = 1", (nom_e, dir_e, tel_e))
-            conexion.commit()
-            st.success("¡Datos de empresa actualizados!")
-            st.rerun()
-
-    st.markdown("---")
-    st.write("### 💰 Actualizar Precios de Compra de Materiales")
-    
-    cursor.execute("SELECT id, nombre, precio_compra FROM materiales ORDER BY nombre ASC")
-    todos_mats = cursor.fetchall()
-    
-    if todos_mats:
-        with st.form("form_actualizar_precios"):
-            nuevos_precios = {}
-            for m_id, m_nom, m_pc in todos_mats:
-                nuevos_precios[m_id] = st.number_input(f"Precio de Compra para '{m_nom}' ($/Kg):", value=float(m_pc), step=0.5, format="%.2f", key=f"precio_mat_{m_id}")
-                
-            if st.form_submit_button("💾 Guardar Nuevos Precios"):
-                for m_id, nuevo_val in nuevos_precios.items():
-                    cursor.execute("UPDATE materiales SET precio_compra = ? WHERE id = ?", (nuevo_val, m_id))
-                conexion.commit()
-                st.success("¡Precios de compra actualizados correctamente en todo el sistema!")
-                st.rerun()
-
-    st.markdown("---")
-    st.write("### 🗑️ Eliminar Materiales")
-    if todos_mats:
-        mat_del = st.selectbox("Seleccione material a eliminar:", [m[1] for m in todos_mats])
-        if st.button("🗑️ Borrar Material Permanentemente"):
-            cursor.execute("DELETE FROM materiales WHERE nombre = ?", (mat_del,))
-            conexion.commit()
-            st.error(f"Material '{mat_del}' eliminado.")
-            st.rerun()
-
-conexion.close()
+    cursor.execute("SELECT COUNT(*), SUM(total
