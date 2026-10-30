@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import os
 import sqlite3
+import base64
 import pandas as pd
 
 try:
@@ -197,6 +198,22 @@ def obtener_ruta_carpeta_tickets():
     os.makedirs(carpeta, exist_ok=True)
     return carpeta
 
+def mostrar_visor_pdf(bytes_pdf, titulo_btn="📥 DESCARGAR / IMPRIMIR PDF"):
+    if bytes_pdf:
+        base64_pdf = base64.b64encode(bytes_pdf).decode('utf-8')
+        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="500px" type="application/pdf"></iframe>'
+        st.markdown("---")
+        st.subheader("👀 Vista Previa en Pantalla")
+        st.markdown(pdf_display, unsafe_allow_html=True)
+        st.write("")
+        st.download_button(
+            label=f"🖨️ {titulo_btn}",
+            data=bytes_pdf,
+            file_name=f"Documento_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            mime="application/pdf",
+            type="primary"
+        )
+
 def generar_pdf_ticket(nombre_emp, dir_emp, tel_emp, folio, fecha, turno, cliente, carrito, total):
     if not PDF_DISPONIBLE:
         return None
@@ -278,7 +295,7 @@ def generar_pdf_corte_caja(nombre_emp, dir_emp, tel_emp, fecha_str, turno_str, e
     return buffer.getvalue()
 
 # ---------------------------------------------------------
-# OPCIÓN 1: BÁSCULA DE COMPRA (CON ATAJOS / BOTONES RÁPIDOS)
+# OPCIÓN 1: BÁSCULA DE COMPRA
 # ---------------------------------------------------------
 if menu == "📝 Registrar Compra (Báscula)":
     st.subheader("🛒 Registro Rápido de Compra con Atajos")
@@ -316,11 +333,7 @@ if menu == "📝 Registrar Compra (Báscula)":
     mats_db = cursor.fetchall()
     dict_mats = {m[1]: (m[0], m[2]) for m in mats_db}
     
-    # Botones de atajos rápidos organizados en columnas
     cols_atajos = st.columns(len(dict_mats) if len(dict_mats) > 0 else 1)
-    material_preseleccionado = None
-    precio_preseleccionado = 0.0
-    
     i = 0
     for mat_n, (m_id, m_p) in dict_mats.items():
         with cols_atajos[i % len(cols_atajos)]:
@@ -360,7 +373,6 @@ if menu == "📝 Registrar Compra (Báscula)":
                     "precio": precio,
                     "subtotal": subtotal
                 })
-                # Limpiamos el atajo temporal
                 if "atj_mat" in st.session_state:
                     del st.session_state.atj_mat
                 st.success(f"Agregado {kilos} kg de {mat_nom} a ${precio}/kg")
@@ -414,27 +426,19 @@ if menu == "📝 Registrar Compra (Báscula)":
                     f_pdf.write(bytes_pdf)
                 st.success(f"¡Compra #{c_id} registrada con éxito! Guardado en la carpeta 'Tickets_Recicladora'.")
                 
-                st.session_state.ultimo_pdf = bytes_pdf
-                st.session_state.ultimo_nombre = f"Ticket_Compra_{c_id}.pdf"
+                st.session_state.ultimo_pdf_compra = bytes_pdf
             
             st.session_state.carrito_compras = []
             st.rerun()
 
-    if "ultimo_pdf" in st.session_state and st.session_state.ultimo_pdf:
-        st.markdown("### 📥 Descargar último ticket generado:")
-        st.download_button(
-            label="📄 DESCARGAR / IMPRIMIR TICKET EN PDF",
-            data=st.session_state.ultimo_pdf,
-            file_name=st.session_state.ultimo_nombre,
-            mime="application/pdf",
-            type="primary"
-        )
+    if "ultimo_pdf_compra" in st.session_state and st.session_state.ultimo_pdf_compra:
+        mostrar_visor_pdf(st.session_state.ultimo_pdf_compra, "DESCARGAR / IMPRIMIR TICKET DE COMPRA")
 
 # ---------------------------------------------------------
 # OPCIÓN 2: VER INVENTARIO Y PRECIOS
 # ---------------------------------------------------------
 elif menu == "📦 Ver Inventario y Precios":
-    st.subheader("📦 Inventario Actual")
+    st.subheader("📦 Inventario Actual y Precios de Compra")
     cursor.execute("SELECT id, nombre, precio_compra, precio_venta, stock_kilos FROM materiales")
     mats = cursor.fetchall()
     df_inv = pd.DataFrame(mats, columns=["ID", "Material", "Precio Compra ($)", "Precio Venta ($)", "Stock (Kg)"])
@@ -566,13 +570,7 @@ elif menu == "✂️ Corte de Caja por Turno y Día":
             with open(nombre_archivo_corte, "wb") as f_pdf:
                 f_pdf.write(bytes_pdf_corte)
                 
-            st.download_button(
-                label="🔴 DESCARGAR / IMPRIMIR CORTE EN PDF",
-                data=bytes_pdf_corte,
-                file_name=f"Corte_Caja_{f_corte}_{filtro_turno}.pdf",
-                mime="application/pdf",
-                type="primary"
-            )
+            mostrar_visor_pdf(bytes_pdf_corte, "DESCARGAR / IMPRIMIR CORTE DE CAJA")
 
 # ---------------------------------------------------------
 # OPCIÓN 6: GASTOS
@@ -690,20 +688,15 @@ elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
             with open(nombre_archivo_rep, "wb") as f_pdf:
                 f_pdf.write(bytes_pdf_rep)
                 
-            st.download_button(
-                label=f"🔴 Descargar Reporte ({periodo}) en PDF",
-                data=bytes_pdf_rep,
-                file_name=f"Reporte_{periodo}.pdf",
-                mime="application/pdf"
-            )
+            mostrar_visor_pdf(bytes_pdf_rep, f"DESCARGAR / IMPRIMIR REPORTE ({periodo.upper()})")
     else:
         st.info("No hay registros de compras en el período seleccionado.")
 
 # ---------------------------------------------------------
-# OPCIÓN 8: CONFIGURACIÓN
+# OPCIÓN 8: CONFIGURACIÓN Y ACTUALIZACIÓN DE PRECIOS
 # ---------------------------------------------------------
 elif menu == "⚙️ Configuración / Datos Empresa":
-    st.subheader("⚙️ Configuración")
+    st.subheader("⚙️ Configuración General y Actualización de Precios de Compra")
     
     with st.form("form_config_emp"):
         nom_e = st.text_input("Nombre del Negocio:", value=emp_nombre)
@@ -712,16 +705,33 @@ elif menu == "⚙️ Configuración / Datos Empresa":
         if st.form_submit_button("Guardar Datos de Empresa"):
             cursor.execute("UPDATE config_empresa SET nombre = ?, direccion = ?, telefono = ? WHERE id = 1", (nom_e, dir_e, tel_e))
             conexion.commit()
-            st.success("¡Datos actualizados!")
+            st.success("¡Datos de empresa actualizados!")
             st.rerun()
 
     st.markdown("---")
+    st.write("### 💰 Actualizar Precios de Compra de Materiales")
+    
+    cursor.execute("SELECT id, nombre, precio_compra FROM materiales ORDER BY nombre ASC")
+    todos_mats = cursor.fetchall()
+    
+    if todos_mats:
+        with st.form("form_actualizar_precios"):
+            nuevos_precios = {}
+            for m_id, m_nom, m_pc in todos_mats:
+                nuevos_precios[m_id] = st.number_input(f"Precio de Compra para '{m_nom}' ($/Kg):", value=float(m_pc), step=0.5, format="%.2f", key=f"precio_mat_{m_id}")
+                
+            if st.form_submit_button("💾 Guardar Nuevos Precios"):
+                for m_id, nuevo_val in nuevos_precios.items():
+                    cursor.execute("UPDATE materiales SET precio_compra = ? WHERE id = ?", (nuevo_val, m_id))
+                conexion.commit()
+                st.success("¡Precios de compra actualizados correctamente en todo el sistema!")
+                st.rerun()
+
+    st.markdown("---")
     st.write("### 🗑️ Eliminar Materiales")
-    cursor.execute("SELECT id, nombre FROM materiales")
-    mats_all = cursor.fetchall()
-    if mats_all:
-        mat_del = st.selectbox("Material:", [m[1] for m in mats_all])
-        if st.button("🗑️ Borrar Material"):
+    if todos_mats:
+        mat_del = st.selectbox("Seleccione material a eliminar:", [m[1] for m in todos_mats])
+        if st.button("🗑️ Borrar Material Permanentemente"):
             cursor.execute("DELETE FROM materiales WHERE nombre = ?", (mat_del,))
             conexion.commit()
             st.error(f"Material '{mat_del}' eliminado.")
