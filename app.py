@@ -15,7 +15,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # ---------------------------------------------------------
-# CONFIGURACIÓN DE PÁGINA Y TEMA VISUAL (VERDE ECOLÓGICO)
+# CONFIGURACIÓN DE PÁGINA Y TEMA VISUAL (ESTILO ESCRITORIO CLÁSICO)
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Chatarrería Don Kilo - ERP",
@@ -26,28 +26,47 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .stApp { background-color: #F4F8F5; }
+    .stApp { background-color: #EFEFEF; }
+    
+    /* Estilo de marcos tipo Windows Forms */
+    .win-frame {
+        border: 2px dashed #999999;
+        background-color: #F8F8F8;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+    }
+    .win-frame-title {
+        font-weight: bold;
+        color: #333333;
+        font-size: 13px;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
     .header-box {
-        background: linear-gradient(135deg, #1E4D2B 0%, #2E7D32 100%);
-        color: white; padding: 20px; border-radius: 12px;
-        text-align: center; margin-bottom: 25px;
-        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.15);
+        background: linear-gradient(135deg, #2C3E50 0%, #34495E 100%);
+        color: white; padding: 15px; border-radius: 6px;
+        text-align: center; margin-bottom: 20px;
+        border: 1px solid #1A252F;
     }
-    .header-box h1 { color: #FFFFFF !important; margin: 0; font-weight: 800; }
-    .header-box p { color: #E8F5E9 !important; margin: 5px 0 0 0; font-size: 15px; }
+    .header-box h1 { color: #FFFFFF !important; margin: 0; font-size: 24px; font-weight: bold; }
+    .header-box p { color: #ECF0F1 !important; margin: 5px 0 0 0; font-size: 13px; }
 
+    /* Botones con estilo clásico de escritorio */
     div.stButton > button:first-child {
-        background-color: #2E7D32 !important; color: white !important;
-        font-weight: bold !important; border-radius: 8px !important;
-        border: none !important; padding: 8px 16px !important;
+        background-color: #E1E1E1 !important; 
+        color: #000000 !important;
+        font-weight: bold !important; 
+        border-radius: 4px !important;
+        border: 1px solid #ADADAD !important; 
+        padding: 6px 14px !important;
     }
-    div.stButton > button:first-child:hover { background-color: #1B5E20 !important; }
-
-    .total-card {
-        background-color: #E8F5E9; border-left: 6px solid #2E7D32;
-        padding: 15px; border-radius: 8px; text-align: center; margin-top: 10px;
+    div.stButton > button:first-child:hover { 
+        background-color: #E5F1FB !important; 
+        border-color: #0078D7 !important;
     }
-    .total-card h2 { color: #1B5E20; margin: 0; font-size: 32px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -178,13 +197,13 @@ emp_telefono = empresa_info[2] if empresa_info else "984-533-8681"
 
 st.markdown(f"""
     <div class="header-box">
-        <h1>♻️ {emp_nombre}</h1>
+        <h1>🖥️ SISTEMA DE CONTROL - {emp_nombre}</h1>
         <p>📍 {emp_direccion} | 📞 Cel: {emp_telefono}</p>
     </div>
 """, unsafe_allow_html=True)
 
 menu = st.sidebar.selectbox("📋 Menú Principal", [
-    "📝 Registrar Compra (Báscula)",
+    "📝 Registro de Compra (Báscula)",
     "📦 Ver Inventario y Precios",
     "📤 Registrar Venta (Salida)",
     "💵 Control de Caja (Fondo / Entradas)",
@@ -200,7 +219,6 @@ def obtener_ruta_carpeta_tickets():
     return carpeta
 
 def mostrar_boton_imprimir_termico(texto_ticket):
-    """Genera un botón HTML interactivo que imprime únicamente el ticket en formato térmico."""
     html_code = f"""
     <div style="text-align: left; margin: 10px 0;">
         <button onclick="
@@ -214,15 +232,14 @@ def mostrar_boton_imprimir_termico(texto_ticket):
             ventana.focus();
             setTimeout(function() {{ ventana.print(); ventana.close(); }}, 250);
         " style="
-            background-color: #2E7D32;
-            color: white;
-            padding: 10px 20px;
-            font-size: 16px;
+            background-color: #E1E1E1;
+            color: #000000;
+            padding: 8px 16px;
+            font-size: 14px;
             font-weight: bold;
-            border: none;
-            border-radius: 8px;
+            border: 1px solid #ADADAD;
+            border-radius: 4px;
             cursor: pointer;
-            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
         ">🖨️ Mandar a Imprimir Ticket</button>
     </div>
     """
@@ -309,14 +326,18 @@ def generar_pdf_corte_caja(nombre_emp, dir_emp, tel_emp, fecha_str, turno_str, e
     return buffer.getvalue()
 
 # ---------------------------------------------------------
-# OPCIÓN 1: BÁSCULA DE COMPRA
+# OPCIÓN 1: BÁSCULA DE COMPRA (ESTILO ESCRITORIO)
 # ---------------------------------------------------------
-if menu == "📝 Registrar Compra (Báscula)":
-    st.subheader("🛒 Registro Rápido de Compra con Atajos y Cambio de Precio")
+if menu == "📝 Registro de Compra (Báscula)":
+    st.markdown("### 📝 REGISTRO DE COMPRA (BÁSCULA)")
+    
+    # Marco 1: Datos Personales / Proveedor
+    st.markdown('<div class="win-frame">', unsafe_allow_html=True)
+    st.markdown('<div class="win-frame-title">Datos Personales / Proveedor</div>', unsafe_allow_html=True)
     
     col_t1, col_t2 = st.columns([2, 2])
     with col_t1:
-        turno_actual = st.selectbox("⏱️ Turno Actual:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
+        turno_actual = st.selectbox("Turno Operativo:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
         
     cursor.execute("SELECT nombre FROM clientes ORDER BY nombre ASC")
     lista_clientes = [c[0] for c in cursor.fetchall()]
@@ -325,23 +346,25 @@ if menu == "📝 Registrar Compra (Báscula)":
         
     col_cli1, col_cli2 = st.columns([3, 1])
     with col_cli1:
-        cliente_sel = st.selectbox("👤 Proveedor / Cliente:", lista_clientes)
+        cliente_sel = st.selectbox("Cliente / Proveedor:", lista_clientes)
     with col_cli2:
-        with st.popover("➕ Agregar Cliente"):
-            cli_nom = st.text_input("Nombre Completo:")
-            cli_tel = st.text_input("Teléfono Celular:")
-            if st.button("Guardar Cliente"):
+        with st.popover("➕ Nuevo"):
+            cli_nom = st.text_input("Nombre:")
+            cli_tel = st.text_input("Teléfono:")
+            if st.button("Guardar Proveedor"):
                 if cli_nom:
                     try:
                         cursor.execute("INSERT INTO clientes (nombre, telefono) VALUES (?, ?)", (cli_nom, cli_tel))
                         conexion.commit()
-                        st.success("¡Cliente guardado!")
+                        st.success("¡Registrado!")
                         st.rerun()
                     except Exception:
-                        st.error("El cliente ya existe.")
+                        st.error("Ya existe.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.write("### ⚡ Atajos de Compras Rápidas (Clic para rellenar)")
+    # Marco 2: Atajos rápidos de selección
+    st.markdown('<div class="win-frame">', unsafe_allow_html=True)
+    st.markdown('<div class="win-frame-title">Atajos de Selección Rápida</div>', unsafe_allow_html=True)
     
     cursor.execute("SELECT id, nombre, precio_compra FROM materiales ORDER BY nombre ASC")
     mats_db = cursor.fetchall()
@@ -351,32 +374,34 @@ if menu == "📝 Registrar Compra (Báscula)":
     i = 0
     for mat_n, (m_id, m_p) in dict_mats.items():
         with cols_atajos[i % len(cols_atajos)]:
-            if st.button(f"📦 {mat_n}\n(${m_p:,.2f})", key=f"atajo_{m_id}"):
+            if st.button(f"{mat_n}\n(${m_p:,.2f})", key=f"atajo_{m_id}"):
                 st.session_state.atj_mat = mat_n
                 st.session_state.atj_precio = float(m_p)
         i += 1
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.write("### ➕ Agregar Material a la Báscula")
+    # Marco 3: Detalle de Producto / Báscula
+    st.markdown('<div class="win-frame">', unsafe_allow_html=True)
+    st.markdown('<div class="win-frame-title">Producto y Pesaje</div>', unsafe_allow_html=True)
     
     mat_def_sel = st.session_state.get("atj_mat", list(dict_mats.keys())[0] if dict_mats else "")
-    mat_nom = st.selectbox("Material:", list(dict_mats.keys()), index=list(dict_mats.keys()).index(mat_def_sel) if mat_def_sel in dict_mats else 0)
+    mat_nom = st.selectbox("Material Seleccionado:", list(dict_mats.keys()), index=list(dict_mats.keys()).index(mat_def_sel) if mat_def_sel in dict_mats else 0)
     mat_id, mat_p_db = dict_mats[mat_nom]
     
     precio_inicial_sugerido = st.session_state.get("atj_precio", float(mat_p_db))
     
     col_m2, col_m3 = st.columns(2)
     with col_m2:
-        kilos = st.number_input("Kilos (Kg):", min_value=0.0, step=0.5, format="%.2f")
+        kilos = st.number_input("Cantidad (Kilos / Kg):", min_value=0.0, step=0.5, format="%.2f")
     with col_m3:
-        precio = st.number_input("Precio $/Kg (Modificable):", value=float(precio_inicial_sugerido), step=0.5, format="%.2f")
+        precio = st.number_input("Precio Unitario ($/Kg):", value=float(precio_inicial_sugerido), step=0.5, format="%.2f")
         
     subtotal = kilos * precio
-    st.info(f"Subtotal calculado: **${subtotal:,.2f} MXN**")
+    st.info(f"Subtotal de Línea: **${subtotal:,.2f} MXN**")
     
     col_b1, col_b2 = st.columns([3, 1])
     with col_b1:
-        if st.button("📥 Agregar a la Lista del Ticket", type="primary"):
+        if st.button("➕ Agregar al Comprobante", type="primary"):
             if kilos <= 0:
                 st.warning("Ingrese una cantidad de kilos mayor a 0.")
             else:
@@ -392,17 +417,19 @@ if menu == "📝 Registrar Compra (Báscula)":
                 })
                 if "atj_mat" in st.session_state:
                     del st.session_state.atj_mat
-                st.success(f"Agregado {kilos} kg de {mat_nom} a ${precio}/kg (Precio actualizado en inventario)")
+                st.success(f"Agregado {kilos} kg de {mat_nom}")
                 st.rerun()
     with col_b2:
-        if st.button("🔄 Limpiar Ticket"):
+        if st.button("🔄 Limpiar"):
             st.session_state.carrito_compras = []
             if "atj_mat" in st.session_state:
                 del st.session_state.atj_mat
             st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.write("### 📄 Contenido Actual del Ticket:")
+    # Marco 4: Datos de Comprobante / Total a Pagar
+    st.markdown('<div class="win-frame">', unsafe_allow_html=True)
+    st.markdown('<div class="win-frame-title">Datos de Comprobante</div>', unsafe_allow_html=True)
     
     if st.session_state.carrito_compras:
         df_car = pd.DataFrame(st.session_state.carrito_compras)
@@ -413,14 +440,13 @@ if menu == "📝 Registrar Compra (Báscula)":
         tot_ticket = sum(i["subtotal"] for i in st.session_state.carrito_compras)
         
         st.markdown(f"""
-        <div class="total-card">
-            <p style="margin:0; font-weight:bold;">TOTAL A PAGAR</p>
-            <h2>${tot_ticket:,.2f} MXN</h2>
+        <div style="background-color: #E2E2E2; border: 1px solid #CCC; padding: 10px; text-align: right; font-weight: bold; font-size: 18px; color: #000;">
+            IMPORTE TOTAL A PAGAR: ${tot_ticket:,.2f} MXN
         </div>
         """, unsafe_allow_html=True)
         
         st.write("")
-        if st.button("🖨️ IMPRIMIR Y GUARDAR TICKET", type="primary", use_container_width=True):
+        if st.button("💾 REGISTRAR E IMPRIMIR TICKET", type="primary", use_container_width=True):
             f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             cursor.execute("INSERT INTO compras (fecha, cliente, total_pagado, turno) VALUES (?, ?, ?, ?)",
                            (f_act, cliente_sel, tot_ticket, turno_actual))
@@ -434,7 +460,6 @@ if menu == "📝 Registrar Compra (Báscula)":
             
             conexion.commit()
             
-            # Generar texto estilo ticket térmico para pantalla
             lineas_ticket = []
             lineas_ticket.append("==================================================")
             lineas_ticket.append("TICKET DE COMPRA - RECICLADORA DON KILO")
@@ -460,14 +485,16 @@ if menu == "📝 Registrar Compra (Báscula)":
                 nombre_archivo = os.path.join(carpeta_tk, f"Ticket_Compra_{c_id}.pdf")
                 with open(nombre_archivo, "wb") as f_pdf:
                     f_pdf.write(bytes_pdf)
-                st.success(f"¡Compra #{c_id} registrada con éxito! Guardado en la carpeta 'Tickets_Recicladora'.")
+                st.success(f"¡Transacción #{c_id} registrada con éxito!")
             
             st.session_state.carrito_compras = []
             st.rerun()
+    else:
+        st.info("Aún no hay partidas agregadas al comprobante actual.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Mostrar vista previa estilo texto térmico y botón directo de impresión del ticket
     if "texto_ticket_pantalla" in st.session_state and st.session_state.texto_ticket_pantalla:
-        st.markdown("### 🖨️ Vista Previa del Ticket (Estilo Térmico)")
+        st.markdown("### 🖨️ Vista Previa del Comprobante")
         st.code(st.session_state.texto_ticket_pantalla, language="")
         mostrar_boton_imprimir_termico(st.session_state.texto_ticket_pantalla)
 
@@ -586,9 +613,9 @@ elif menu == "✂️ Corte de Caja por Turno y Día":
     efectivo_restante = (tot_ingresado + tot_ventas) - (tot_compras + tot_gastos)
     
     st.markdown(f"""
-    <div class="total-card">
-        <p style="margin:0; font-weight:bold;">EFECTIVO RESTANTE EN CAJA ({filtro_turno.upper()})</p>
-        <h2>${efectivo_restante:,.2f} MXN</h2>
+    <div style="background-color: #E2E2E2; border: 1px solid #CCC; padding: 15px; border-radius: 4px; text-align: center;">
+        <p style="margin:0; font-weight:bold; color: #333;">EFECTIVO RESTANTE EN CAJA ({filtro_turno.upper()})</p>
+        <h2 style="color: #111; margin: 5px 0 0 0;">${efectivo_restante:,.2f} MXN</h2>
     </div>
     """, unsafe_allow_html=True)
     
