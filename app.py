@@ -199,4 +199,540 @@ def obtener_ruta_carpeta_tickets():
     os.makedirs(carpeta, exist_ok=True)
     return carpeta
 
-def mostrar
+def mostrar_boton_imprimir_termico(texto_ticket):
+    """Genera un botón HTML interactivo que imprime únicamente el ticket en formato térmico."""
+    html_code = f"""
+    <div style="text-align: left; margin: 10px 0;">
+        <button onclick="
+            var ventana = window.open('', '_print', 'height=600,width=400');
+            ventana.document.write('<html><head><title>Imprimir Ticket</title>');
+            ventana.document.write('<style>body {{ font-family: monospace; white-space: pre; font-size: 12px; margin: 10px; }}</style>');
+            ventana.document.write('</head><body>');
+            ventana.document.write(`{texto_ticket}`);
+            ventana.document.write('</body></html>');
+            ventana.document.close();
+            ventana.focus();
+            setTimeout(function() {{ ventana.print(); ventana.close(); }}, 250);
+        " style="
+            background-color: #2E7D32;
+            color: white;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+        ">🖨️ Mandar a Imprimir Ticket</button>
+    </div>
+    """
+    components.html(html_code, height=60)
+
+def generar_pdf_ticket(nombre_emp, dir_emp, tel_emp, folio, fecha, turno, cliente, carrito, total):
+    if not PDF_DISPONIBLE:
+        return None
+    from io import BytesIO
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(50, 750, f"♻️ {nombre_emp}")
+    p.setFont("Helvetica", 9)
+    p.drawString(50, 735, f"{dir_emp} | Cel: {tel_emp}")
+    p.line(50, 725, 500, 725)
+    
+    p.setFont("Helvetica-Bold", 11)
+    p.drawString(50, 705, f"TICKET DE COMPRA #{folio}")
+    p.setFont("Helvetica", 10)
+    p.drawString(50, 685, f"Fecha: {fecha} | Turno: {turno}")
+    p.drawString(50, 665, f"Proveedor / Cliente: {cliente}")
+    p.line(50, 655, 500, 655)
+    
+    y = 635
+    p.setFont("Helvetica-Bold", 9)
+    p.drawString(50, y, "MATERIAL")
+    p.drawString(220, y, "KILOS (KG)")
+    p.drawString(320, y, "PRECIO/KG")
+    p.drawString(420, y, "SUBTOTAL")
+    y -= 15
+    
+    p.setFont("Helvetica", 9)
+    for item in carrito:
+        p.drawString(50, y, str(item['material']))
+        p.drawString(220, y, f"{item['kilos']:.2f} kg")
+        p.drawString(320, y, f"${item['precio']:,.2f}")
+        p.drawString(420, y, f"${item['subtotal']:,.2f}")
+        y -= 18
+        if y < 100:
+            p.showPage()
+            y = 750
+            
+    p.line(50, y - 5, 500, y - 5)
+    y -= 25
+    p.setFont("Helvetica-Bold", 12)
+    p.drawString(50, y, f"TOTAL A PAGAR: ${total:,.2f} MXN")
+    
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+def generar_pdf_corte_caja(nombre_emp, dir_emp, tel_emp, fecha_str, turno_str, efectivo, ingresos, ventas, compras, gastos):
+    if not PDF_DISPONIBLE:
+        return None
+    from io import BytesIO
+    buffer = BytesIO()
+    p = canvas.Canvas(buffer, pagesize=letter)
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(50, 750, f"♻️ {nombre_emp}")
+    p.setFont("Helvetica", 10)
+    p.drawString(50, 735, f"{dir_emp} | Tel: {tel_emp}")
+    p.line(50, 725, 550, 725)
+    
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(50, 695, f"CORTE DE CAJA - {fecha_str}")
+    p.setFont("Helvetica", 11)
+    p.drawString(50, 675, f"Filtro Turno: {turno_str}")
+    
+    p.drawString(50, 640, f"Fondo e Inyecciones a Caja: ${ingresos:,.2f} MXN")
+    p.drawString(50, 620, f"Ventas Realizadas:           ${ventas:,.2f} MXN")
+    p.drawString(50, 600, f"(-) Compras en Material:     ${compras:,.2f} MXN")
+    p.drawString(50, 580, f"(-) Gastos Operativos:        ${gastos:,.2f} MXN")
+    
+    p.line(50, 565, 550, 565)
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(50, 540, f"EFECTIVO RESTANTE EN CAJA: ${efectivo:,.2f} MXN")
+    p.line(50, 525, 550, 525)
+    
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+# ---------------------------------------------------------
+# OPCIÓN 1: BÁSCULA DE COMPRA
+# ---------------------------------------------------------
+if menu == "📝 Registrar Compra (Báscula)":
+    st.subheader("🛒 Registro Rápido de Compra con Atajos y Cambio de Precio")
+    
+    col_t1, col_t2 = st.columns([2, 2])
+    with col_t1:
+        turno_actual = st.selectbox("⏱️ Turno Actual:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
+        
+    cursor.execute("SELECT nombre FROM clientes ORDER BY nombre ASC")
+    lista_clientes = [c[0] for c in cursor.fetchall()]
+    if "Público General" not in lista_clientes:
+        lista_clientes.insert(0, "Público General")
+        
+    col_cli1, col_cli2 = st.columns([3, 1])
+    with col_cli1:
+        cliente_sel = st.selectbox("👤 Proveedor / Cliente:", lista_clientes)
+    with col_cli2:
+        with st.popover("➕ Agregar Cliente"):
+            cli_nom = st.text_input("Nombre Completo:")
+            cli_tel = st.text_input("Teléfono Celular:")
+            if st.button("Guardar Cliente"):
+                if cli_nom:
+                    try:
+                        cursor.execute("INSERT INTO clientes (nombre, telefono) VALUES (?, ?)", (cli_nom, cli_tel))
+                        conexion.commit()
+                        st.success("¡Cliente guardado!")
+                        st.rerun()
+                    except Exception:
+                        st.error("El cliente ya existe.")
+
+    st.markdown("---")
+    st.write("### ⚡ Atajos de Compras Rápidas (Clic para rellenar)")
+    
+    cursor.execute("SELECT id, nombre, precio_compra FROM materiales ORDER BY nombre ASC")
+    mats_db = cursor.fetchall()
+    dict_mats = {m[1]: (m[0], m[2]) for m in mats_db}
+    
+    cols_atajos = st.columns(len(dict_mats) if len(dict_mats) > 0 else 1)
+    i = 0
+    for mat_n, (m_id, m_p) in dict_mats.items():
+        with cols_atajos[i % len(cols_atajos)]:
+            if st.button(f"📦 {mat_n}\n(${m_p:,.2f})", key=f"atajo_{m_id}"):
+                st.session_state.atj_mat = mat_n
+                st.session_state.atj_precio = float(m_p)
+        i += 1
+
+    st.markdown("---")
+    st.write("### ➕ Agregar Material a la Báscula")
+    
+    mat_def_sel = st.session_state.get("atj_mat", list(dict_mats.keys())[0] if dict_mats else "")
+    mat_nom = st.selectbox("Material:", list(dict_mats.keys()), index=list(dict_mats.keys()).index(mat_def_sel) if mat_def_sel in dict_mats else 0)
+    mat_id, mat_p_db = dict_mats[mat_nom]
+    
+    precio_inicial_sugerido = st.session_state.get("atj_precio", float(mat_p_db))
+    
+    col_m2, col_m3 = st.columns(2)
+    with col_m2:
+        kilos = st.number_input("Kilos (Kg):", min_value=0.0, step=0.5, format="%.2f")
+    with col_m3:
+        precio = st.number_input("Precio $/Kg (Modificable):", value=float(precio_inicial_sugerido), step=0.5, format="%.2f")
+        
+    subtotal = kilos * precio
+    st.info(f"Subtotal calculado: **${subtotal:,.2f} MXN**")
+    
+    col_b1, col_b2 = st.columns([3, 1])
+    with col_b1:
+        if st.button("📥 Agregar a la Lista del Ticket", type="primary"):
+            if kilos <= 0:
+                st.warning("Ingrese una cantidad de kilos mayor a 0.")
+            else:
+                cursor.execute("UPDATE materiales SET precio_compra = ? WHERE id = ?", (precio, mat_id))
+                conexion.commit()
+
+                st.session_state.carrito_compras.append({
+                    "material_id": mat_id,
+                    "material": mat_nom,
+                    "kilos": kilos,
+                    "precio": precio,
+                    "subtotal": subtotal
+                })
+                if "atj_mat" in st.session_state:
+                    del st.session_state.atj_mat
+                st.success(f"Agregado {kilos} kg de {mat_nom} a ${precio}/kg (Precio actualizado en inventario)")
+                st.rerun()
+    with col_b2:
+        if st.button("🔄 Limpiar Ticket"):
+            st.session_state.carrito_compras = []
+            if "atj_mat" in st.session_state:
+                del st.session_state.atj_mat
+            st.rerun()
+
+    st.markdown("---")
+    st.write("### 📄 Contenido Actual del Ticket:")
+    
+    if st.session_state.carrito_compras:
+        df_car = pd.DataFrame(st.session_state.carrito_compras)
+        st.dataframe(df_car[["material", "kilos", "precio", "subtotal"]].rename(columns={
+            "material": "Material", "kilos": "Kilos (Kg)", "precio": "Precio $/Kg", "subtotal": "Subtotal ($)"
+        }), use_container_width=True)
+        
+        tot_ticket = sum(i["subtotal"] for i in st.session_state.carrito_compras)
+        
+        st.markdown(f"""
+        <div class="total-card">
+            <p style="margin:0; font-weight:bold;">TOTAL A PAGAR</p>
+            <h2>${tot_ticket:,.2f} MXN</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.write("")
+        if st.button("🖨️ IMPRIMIR Y GUARDAR TICKET", type="primary", use_container_width=True):
+            f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute("INSERT INTO compras (fecha, cliente, total_pagado, turno) VALUES (?, ?, ?, ?)",
+                           (f_act, cliente_sel, tot_ticket, turno_actual))
+            c_id = cursor.lastrowid
+            
+            for item in st.session_state.carrito_compras:
+                cursor.execute("INSERT INTO detalle_compra (compra_id, material_id, kilos, subtotal) VALUES (?, ?, ?, ?)",
+                               (c_id, item['material_id'], item['kilos'], item['subtotal']))
+                cursor.execute("UPDATE materiales SET stock_kilos = stock_kilos + ? WHERE id = ?",
+                               (item['kilos'], item['material_id']))
+            
+            conexion.commit()
+            
+            # Generar texto estilo ticket térmico para pantalla
+            lineas_ticket = []
+            lineas_ticket.append("==================================================")
+            lineas_ticket.append("TICKET DE COMPRA - RECICLADORA DON KILO")
+            lineas_ticket.append("==================================================")
+            lineas_ticket.append(f"Folio: #{c_id}  |  Fecha: {f_act}")
+            lineas_ticket.append(f"Proveedor: {cliente_sel}")
+            lineas_ticket.append("--------------------------------------------------")
+            for item in st.session_state.carrito_compras:
+                mat_str = f"{item['material']:<18}"
+                kg_str = f"{item['kilos']:>5.1f} kg"
+                sub_str = f"${item['subtotal']:>8.2f}"
+                lineas_ticket.append(f"{mat_str} {kg_str}   {sub_str}")
+            lineas_ticket.append("--------------------------------------------------")
+            lineas_ticket.append(f"TOTAL A PAGAR: ${tot_ticket:,.2f}")
+            lineas_ticket.append("==================================================")
+            
+            st.session_state.texto_ticket_pantalla = "\n".join(lineas_ticket)
+            
+            bytes_pdf = generar_pdf_ticket(emp_nombre, emp_direccion, emp_telefono, c_id, f_act, turno_actual, cliente_sel, st.session_state.carrito_compras, tot_ticket)
+            
+            if bytes_pdf:
+                carpeta_tk = obtener_ruta_carpeta_tickets()
+                nombre_archivo = os.path.join(carpeta_tk, f"Ticket_Compra_{c_id}.pdf")
+                with open(nombre_archivo, "wb") as f_pdf:
+                    f_pdf.write(bytes_pdf)
+                st.success(f"¡Compra #{c_id} registrada con éxito! Guardado en la carpeta 'Tickets_Recicladora'.")
+            
+            st.session_state.carrito_compras = []
+            st.rerun()
+
+    # Mostrar vista previa estilo texto térmico y botón directo de impresión del ticket
+    if "texto_ticket_pantalla" in st.session_state and st.session_state.texto_ticket_pantalla:
+        st.markdown("### 🖨️ Vista Previa del Ticket (Estilo Térmico)")
+        st.code(st.session_state.texto_ticket_pantalla, language="")
+        mostrar_boton_imprimir_termico(st.session_state.texto_ticket_pantalla)
+
+# ---------------------------------------------------------
+# OPCIÓN 2: VER INVENTARIO Y PRECIOS
+# ---------------------------------------------------------
+elif menu == "📦 Ver Inventario y Precios":
+    st.subheader("📦 Inventario Actual y Precios de Compra")
+    cursor.execute("SELECT id, nombre, precio_compra, precio_venta, stock_kilos FROM materiales")
+    mats = cursor.fetchall()
+    df_inv = pd.DataFrame(mats, columns=["ID", "Material", "Precio Compra ($)", "Precio Venta ($)", "Stock (Kg)"])
+    st.dataframe(df_inv, use_container_width=True)
+
+# ---------------------------------------------------------
+# OPCIÓN 3: REGISTRAR VENTA
+# ---------------------------------------------------------
+elif menu == "📤 Registrar Venta (Salida)":
+    st.subheader("📤 Registrar Venta de Material")
+    turno_v = st.selectbox("⏱️ Turno:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
+    comprador = st.text_input("Fundidora / Comprador Final:")
+    
+    cursor.execute("SELECT id, nombre, precio_venta, stock_kilos FROM materiales")
+    mats_v = cursor.fetchall()
+    
+    dict_v = {}
+    for m in mats_v:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"**{m[1]}** (Disp: {m[3]:.1f} kg)")
+        with col2:
+            kv = st.number_input(f"Kg a vender de {m[1]}", min_value=0.0, max_value=float(m[3]), key=f"v_{m[0]}")
+        with col3:
+            st.write(f"Subtotal: **${kv * m[2]:,.2f}**")
+        if kv > 0:
+            dict_v[m[0]] = (m[1], kv, m[2], kv * m[2])
+            
+    if st.button("Finalizar Venta", type="primary"):
+        if not comprador:
+            st.error("Ingrese el comprador.")
+        elif not dict_v:
+            st.error("Seleccione al menos un producto.")
+        else:
+            f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            tot_v = sum(x[3] for x in dict_v.values())
+            cursor.execute("INSERT INTO ventas (fecha, comprador, total_cobrado, turno) VALUES (?, ?, ?, ?)",
+                           (f_act, comprador, tot_v, turno_v))
+            v_id = cursor.lastrowid
+            
+            for mid, data in dict_v.items():
+                cursor.execute("INSERT INTO detalle_venta (venta_id, material_id, kilos, subtotal) VALUES (?, ?, ?, ?)",
+                               (v_id, mid, data[1], data[3]))
+                cursor.execute("UPDATE materiales SET stock_kilos = stock_kilos - ? WHERE id = ?",
+                               (data[1], mid))
+            
+            conexion.commit()
+            st.success(f"¡Venta #{v_id} registrada por ${tot_v:,.2f}!")
+
+# ---------------------------------------------------------
+# OPCIÓN 4: CONTROL DE CAJA
+# ---------------------------------------------------------
+elif menu == "💵 Control de Caja (Fondo / Entradas)":
+    st.subheader("💵 Fondo e Inyecciones de Caja")
+    
+    with st.form("form_caja_in"):
+        turno_c = st.selectbox("Turno:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
+        tipo_m = st.selectbox("Tipo:", ["Fondo Inicial de Caja", "Inyección Extra de Efectivo"])
+        monto_m = st.number_input("Monto ($):", min_value=0.0, step=100.0)
+        motivo_m = st.text_input("Motivo:")
+        
+        if st.form_submit_button("Guardar en Caja"):
+            if monto_m > 0:
+                f_act = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                cursor.execute("INSERT INTO movimientos_caja (fecha, tipo, monto, motivo, turno) VALUES (?, ?, ?, ?, ?)",
+                               (f_act, tipo_m, monto_m, motivo_m, turno_c))
+                conexion.commit()
+                st.success(f"Se ingresaron ${monto_m:,.2f} a caja en [{turno_c}].")
+                st.rerun()
+
+    cursor.execute("SELECT id, fecha, turno, tipo, monto, motivo FROM movimientos_caja ORDER BY id DESC")
+    df_caja_movs = pd.DataFrame(cursor.fetchall(), columns=["ID", "Fecha", "Turno", "Tipo", "Monto", "Motivo"])
+    st.dataframe(df_caja_movs, use_container_width=True)
+
+# ---------------------------------------------------------
+# OPCIÓN 5: CORTE DE CAJA POR TURNO Y DÍA
+# ---------------------------------------------------------
+elif menu == "✂️ Corte de Caja por Turno y Día":
+    st.subheader("✂️ Arqueo y Corte de Caja en PDF")
+    
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        f_corte = st.date_input("Fecha del Corte:", datetime.now())
+    with col_f2:
+        filtro_turno = st.selectbox("Filtrar por Turno:", ["Todos los Turnos (Día Completo)", "Turno 1 (Mañana)", "Turno 2 (Tarde)"])
+        
+    f_i = f_corte.strftime("%Y-%m-%d 00:00:00")
+    f_f = f_corte.strftime("%Y-%m-%d 23:59:59")
+    
+    cond_turno = ""
+    params_t = [f_i, f_f]
+    if filtro_turno != "Todos los Turnos (Día Completo)":
+        cond_turno = " AND turno = ?"
+        params_t.append(filtro_turno)
+        
+    cursor.execute(f"SELECT SUM(monto) FROM movimientos_caja WHERE fecha >= ? AND fecha <= ?{cond_turno}", params_t)
+    tot_ingresado = cursor.fetchone()[0] or 0.0
+    
+    cursor.execute(f"SELECT SUM(total_cobrado) FROM ventas WHERE fecha >= ? AND fecha <= ?{cond_turno}", params_t)
+    tot_ventas = cursor.fetchone()[0] or 0.0
+    
+    cursor.execute(f"SELECT SUM(total_pagado) FROM compras WHERE fecha >= ? AND fecha <= ?{cond_turno}", params_t)
+    tot_compras = cursor.fetchone()[0] or 0.0
+    
+    cursor.execute(f"SELECT SUM(monto) FROM gastos WHERE fecha >= ? AND fecha <= ?{cond_turno}", params_t)
+    tot_gastos = cursor.fetchone()[0] or 0.0
+    
+    efectivo_restante = (tot_ingresado + tot_ventas) - (tot_compras + tot_gastos)
+    
+    st.markdown(f"""
+    <div class="total-card">
+        <p style="margin:0; font-weight:bold;">EFECTIVO RESTANTE EN CAJA ({filtro_turno.upper()})</p>
+        <h2>${efectivo_restante:,.2f} MXN</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.write("")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Fondo/Inyecciones", f"${tot_ingresado:,.2f}")
+    col2.metric("Ventas Cobradas", f"${tot_ventas:,.2f}")
+    col3.metric("Comprado en Material", f"${tot_compras:,.2f}")
+    col4.metric("Gastos Generales", f"${tot_gastos:,.2f}")
+
+# ---------------------------------------------------------
+# OPCIÓN 6: GASTOS
+# ---------------------------------------------------------
+elif menu == "💸 Registrar y Administrar Gastos":
+    st.subheader("💸 Registro de Gastos")
+    with st.form("fgastos"):
+        turno_g = st.selectbox("Turno:", ["Turno 1 (Mañana)", "Turno 2 (Tarde)", "Turno Completo"])
+        cat = st.selectbox("Categoría:", ["Sueldo", "Gasolina", "Mantenimiento", "Luz", "Agua", "Otros"])
+        mon = st.number_input("Monto ($):", min_value=0.0)
+        des = st.text_input("Descripción:")
+        
+        if st.form_submit_button("Guardar Gasto"):
+            if mon > 0:
+                cursor.execute("INSERT INTO gastos (fecha, categoria, descripcion, monto, turno) VALUES (?, ?, ?, ?, ?)",
+                               (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), cat, des, mon, turno_g))
+                conexion.commit()
+                st.success("Gasto registrado.")
+                st.rerun()
+
+    cursor.execute("SELECT id, fecha, turno, categoria, descripcion, monto FROM gastos ORDER BY id DESC")
+    df_g = pd.DataFrame(cursor.fetchall(), columns=["ID", "Fecha", "Turno", "Categoría", "Descripción", "Monto"])
+    st.dataframe(df_g, use_container_width=True)
+
+# ---------------------------------------------------------
+# OPCIÓN 7: REPORTES
+# ---------------------------------------------------------
+elif menu == "📊 Reportes (Diario, Semanal, Mensual, Anual)":
+    st.subheader("📊 Reportes Financieros")
+    
+    periodo = st.radio("Seleccione el período de consulta:", ["Diario (Hoy)", "Semanal", "Mensual", "Anual", "Personalizado"], horizontal=True)
+    
+    ahora = datetime.now()
+    if periodo == "Diario (Hoy)":
+        f_inicio = ahora.strftime("%Y-%m-%d 00:00:00")
+        f_fin = ahora.strftime("%Y-%m-%d 23:59:59")
+    elif periodo == "Semanal":
+        f_inicio = (ahora - timedelta(days=7)).strftime("%Y-%m-%d 00:00:00")
+        f_fin = ahora.strftime("%Y-%m-%d 23:59:59")
+    elif periodo == "Mensual":
+        f_inicio = ahora.strftime("%Y-%m-01 00:00:00")
+        f_fin = ahora.strftime("%Y-%m-%d 23:59:59")
+    elif periodo == "Anual":
+        f_inicio = ahora.strftime("%Y-01-01 00:00:00")
+        f_fin = ahora.strftime("%Y-%m-%d 23:59:59")
+    else:
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            d_i = st.date_input("Fecha Inicio:", ahora - timedelta(days=30))
+        with col_p2:
+            d_f = st.date_input("Fecha Fin:", ahora)
+        f_inicio = d_i.strftime("%Y-%m-%d 00:00:00")
+        f_fin = d_f.strftime("%Y-%m-%d 23:59:59")
+        
+    cursor.execute("SELECT COUNT(*), SUM(total_pagado) FROM compras WHERE fecha >= ? AND fecha <= ?", (f_inicio, f_fin))
+    res_c = cursor.fetchone()
+    num_compras = res_c[0] or 0
+    tot_compra_dinero = res_c[1] or 0.0
+    
+    cursor.execute("SELECT SUM(monto) FROM gastos WHERE fecha >= ? AND fecha <= ?", (f_inicio, f_fin))
+    tot_gastos_per = cursor.fetchone()[0] or 0.0
+    
+    cursor.execute('''
+        SELECT m.nombre, SUM(d.kilos), SUM(d.subtotal), 
+               SUM((m.precio_venta - m.precio_compra) * d.kilos) as utilidad
+        FROM detalle_compra d
+        JOIN compras c ON d.compra_id = c.id
+        JOIN materiales m ON d.material_id = m.id
+        WHERE c.fecha >= ? AND c.fecha <= ?
+        GROUP BY m.nombre
+    ''', (f_inicio, f_fin))
+    mats_rep = cursor.fetchall()
+    
+    util_bruta_per = sum(r[3] for r in mats_rep) if mats_rep else 0.0
+    util_neta_per = util_bruta_per - tot_gastos_per
+    
+    st.write("---")
+    col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
+    col_r1.metric("Tickets Compra", num_compras)
+    col_r2.metric("Inversión en Material", f"${tot_compra_dinero:,.2f}")
+    col_r3.metric("Utilidad Bruta Est.", f"${util_bruta_per:,.2f}")
+    col_r4.metric("Gastos Totales", f"${tot_gastos_per:,.2f}")
+    col_r5.metric("Utilidad Neta Real", f"${util_neta_per:,.2f}")
+    
+    st.write("---")
+    st.write(f"### Desglose de Compras ({periodo})")
+    if mats_rep:
+        df_rep = pd.DataFrame(mats_rep, columns=["Material", "Kilos Comprados", "Inversión ($)", "Utilidad Est. ($)"])
+        st.dataframe(df_rep, use_container_width=True)
+    else:
+        st.info("No hay registros de compras en el período seleccionado.")
+
+# ---------------------------------------------------------
+# OPCIÓN 8: CONFIGURACIÓN / PRECIOS / EMPRESA
+# ---------------------------------------------------------
+elif menu == "⚙️ Configuración / Precios / Empresa":
+    st.subheader("⚙️ Configuración General, Precios de Compra y Datos de Empresa")
+    
+    with st.form("form_config_emp"):
+        nom_e = st.text_input("Nombre del Negocio:", value=emp_nombre)
+        dir_e = st.text_input("Dirección:", value=emp_direccion)
+        tel_e = st.text_input("Teléfono / Celular:", value=emp_telefono)
+        if st.form_submit_button("Guardar Datos de Empresa"):
+            cursor.execute("UPDATE config_empresa SET nombre = ?, direccion = ?, telefono = ? WHERE id = 1", (nom_e, dir_e, tel_e))
+            conexion.commit()
+            st.success("¡Datos de empresa actualizados!")
+            st.rerun()
+
+    st.markdown("---")
+    st.write("### 💰 Configuración Oficial de Precios de Compra por Material")
+    
+    cursor.execute("SELECT id, nombre, precio_compra FROM materiales ORDER BY nombre ASC")
+    todos_mats = cursor.fetchall()
+    
+    if todos_mats:
+        with st.form("form_actualizar_precios"):
+            nuevos_precios = {}
+            for m_id, m_nom, m_pc in todos_mats:
+                nuevos_precios[m_id] = st.number_input(f"Precio Oficial de Compra para '{m_nom}' ($/Kg):", value=float(m_pc), step=0.5, format="%.2f", key=f"precio_mat_{m_id}")
+                
+            if st.form_submit_button("💾 Guardar Precios en el Inventario"):
+                for m_id, nuevo_val in nuevos_precios.items():
+                    cursor.execute("UPDATE materiales SET precio_compra = ? WHERE id = ?", (nuevo_val, m_id))
+                conexion.commit()
+                st.success("¡Precios de compra actualizados correctamente en el inventario general!")
+                st.rerun()
+
+    st.markdown("---")
+    st.write("### 🗑️ Eliminar Materiales")
+    if todos_mats:
+        mat_del = st.selectbox("Seleccione material a eliminar:", [m[1] for m in todos_mats])
+        if st.button("🗑️ Borrar Material Permanentemente"):
+            cursor.execute("DELETE FROM materiales WHERE nombre = ?", (mat_del,))
+            conexion.commit()
+            st.error(f"Material '{mat_del}' eliminado.")
+            st.rerun()
+
+conexion.close()
